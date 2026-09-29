@@ -3,14 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "hostinger.cjs",
+  "engines": {
+    "node": ">=22 <25"
+  },
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "server": "node server/index.js",
-    "start": "NODE_ENV=production node server/index.js",
+    "start": "NODE_ENV=production node hostinger.cjs",
     "build": "vite build",
     "test": "node --test server/*.test.js src/*.test.js",
     "test:ui": "node scripts/ui-regressions.mjs all && node scripts/production-ui.mjs",
-    "verify": "npm test && npm run build && npm run test:ui"
+    "verify": "npm run build && npm test && npm run test:ui"
   },
   "dependencies": {
     "react": "^19.1.0",
