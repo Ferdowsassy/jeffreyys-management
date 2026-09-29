@@ -63,7 +63,7 @@ async function initialize() {
       process.env.COOKIE_SECURE === undefined
         ? production
         : process.env.COOKIE_SECURE === "true",
-    staticDir: fileURLToPath(new URL("../dist", import.meta.url)),
+    assumeHttps: process.env.HTTPS_BEHIND_PROXY === "true",\n    staticDir: fileURLToPath(new URL("../dist", import.meta.url)),
     bootstrap,
   });
 

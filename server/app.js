@@ -20,12 +20,12 @@ const sessionUser = (employee) =>
 export async function createApp({
   dataFile = fileURLToPath(new URL("./data/state.json", import.meta.url)),
   demo = false, bootstrap, production = false, origin, trustProxy = false,
-  secureCookie = production, staticDir, aiFetch = fetch,
+  secureCookie = production, assumeHttps = false, staticDir, aiFetch = fetch,
 } = {}) {
   if (production && (demo || !secureCookie || !origin || new URL(origin).protocol !== "https:"))
     throw new Error("Production requires HTTPS APP_ORIGIN, secure cookies and DEMO_MODE=false");
   if (origin && new URL(origin).origin !== origin) throw new Error("APP_ORIGIN must be an exact origin without a path");
-  if (trustProxy === true || typeof trustProxy === "number") throw new Error("Trust only explicit proxy IPs/subnets, never all proxies or hop counts");
+  if (trustProxy === true || typeof trustProxy === "number") throw new Error("Trust only explicit proxy IPs/subnets, never all proxies or hop counts");\n  if (assumeHttps && (!production || !origin || new URL(origin).protocol !== "https:"))\n    throw new Error("HTTPS proxy mode requires production and an HTTPS APP_ORIGIN");
   if (staticDir) await access(resolve(staticDir, "index.html"));
   const store = await createStore(dataFile, { demo, bootstrap }),
     app = express(),
@@ -53,7 +53,7 @@ export async function createApp({
   app.disable("x-powered-by");
   app.use(express.json({ limit: "8mb" }));
   app.use((req, res, next) => {
-    if (production && !req.secure)
+    if (production && !req.secure && !assumeHttps)
       return res.status(426).json({ error: "HTTPS required" });
     res.set("Cache-Control", "no-store");
     res.set("X-Content-Type-Options", "nosniff");
