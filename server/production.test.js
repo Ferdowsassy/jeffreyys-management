@@ -1,0 +1,88 @@
+import test from 'node:test';
+import { spawn } from 'node:child_process';
+import { writeFile, access } from 'node:fs/promises';
+test('production entrypoint bootstraps from file, serves UI, and releases lock on SIGTERM', async t => {
+ const dir=await mkdtemp(tmpdir()+'/jeffreyys-entryprod-');
+ await writeFile(dir+'/pin','9876543210',{mode:0o600});
+ const child=spawn(process.execPath,['server/index.js'],{env:{...process.env,NODE_ENV:'production',DEMO_MODE:'false',HOST:'127.0.0.1',PORT:'0',DATA_FILE:dir+'/state.json',APP_ORIGIN:'https://workspace.example',TRUST_PROXY:'loopback',BOOTSTRAP_NAME:'Owner',BOOTSTRAP_PIN_FILE:dir+'/pin'},stdio:['ignore','pipe','pipe']});
+ t.after(async()=>{if(child.exitCode===null) child.kill('SIGKILL'); await rm(dir,{recursive:true,force:true});});
+ let errors=''; child.stderr.on('data',b=>errors+=b);
+ const base=await new Promise((resolve,reject)=>{
+  const timer=setTimeout(()=>{child.kill();reject(Error('Startup timeout '+errors));},5000);
+  child.stdout.on('data',b=>{const m=String(b).match(/http:\/\/127\.0\.0\.1:\d+/);if(m){clearTimeout(timer);resolve(m[0]);}});
+  child.once('exit',code=>{clearTimeout(timer);reject(Error('Exit '+code+' '+errors));});
+ });
+ assert.equal((await fetch(base+'/healthz')).status,200);
+ assert.equal((await fetch(base+'/',{headers:{'x-forwarded-proto':'https'}})).status,200);
+ const exit=new Promise(r=>child.once('exit',r)); child.kill('SIGTERM'); assert.equal(await exit,0);
+ await assert.rejects(access(dir+'/state.json.lock'));
+ const reopened=await createStore(dir+'/state.json'); assert.equal(reopened.read().employees.length,1); await reopened.close();
+ const restart=spawn(process.execPath,['server/index.js'],{env:{...process.env,NODE_ENV:'production',DEMO_MODE:'false',HOST:'127.0.0.1',PORT:'0',DATA_FILE:dir+'/state.json',APP_ORIGIN:'https://workspace.example',TRUST_PROXY:'loopback',BOOTSTRAP_NAME:'Owner',BOOTSTRAP_PIN_FILE:dir+'/missing-pin'},stdio:['ignore','pipe','pipe']});
+ t.after(()=>{if(restart.exitCode===null) restart.kill('SIGKILL');});
+ let restartErrors=''; restart.stderr.on('data',b=>restartErrors+=b);
+ await new Promise((resolve,reject)=>{const timer=setTimeout(()=>{restart.kill();reject(Error('Restart timeout '+restartErrors));},5000);restart.stdout.on('data',b=>{if(/http:\/\/127\.0\.0\.1:\d+/.test(String(b))){clearTimeout(timer);resolve();}});restart.once('exit',code=>{clearTimeout(timer);reject(Error('Restart exit '+code+' '+restartErrors));});});
+ const restartExit=new Promise(r=>restart.once('exit',r)); restart.kill('SIGTERM'); assert.equal(await restartExit,0);
+});
+import { resolve } from 'node:path';
+test('production serves built UI and health, enforces HTTPS origin and secure cookie', async t => {
+ const dir=await mkdtemp(tmpdir()+'/jeffreyys-http-');
+ const app=await createApp({dataFile:dir+'/state.json',bootstrap:{name:'Owner',pin:'9876543210'},production:true,origin:'https://workspace.example',trustProxy:['loopback'],staticDir:resolve('dist')});
+ const server=app.listen(0,'127.0.0.1'); await new Promise(r=>server.once('listening',r));
+ t.after(async()=>{server.closeAllConnections(); await new Promise(r=>server.close(r)); await app.locals.close(); await rm(dir,{recursive:true,force:true});});
+ const base='http://127.0.0.1:'+server.address().port;
+ assert.equal((await fetch(base+'/healthz')).status,200);
+ const forwarded={headers:{'x-forwarded-proto':'https'}};
+ const html=await fetch(base+'/',forwarded); assert.equal(html.status,200); assert.match(await html.text(),/id="root"/);
+ assert.match(html.headers.get('content-security-policy'),/frame-ancestors 'none'/);
+ const id=app.locals.store.read().employees[0].id;
+ const direct=await fetch(base+'/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id,pin:'9876543210'})});
+ assert.equal(direct.status,426);
+ const login=await fetch(base+'/api/login',{method:'POST',headers:{'content-type':'application/json',origin:'https://workspace.example','x-forwarded-proto':'https'},body:JSON.stringify({id,pin:'9876543210'})});
+ assert.equal(login.status,200); assert.match(login.headers.get('set-cookie'),/Secure/);
+ const bad=await fetch(base+'/api/login',{method:'POST',headers:{'content-type':'application/json',origin:'http://workspace.example','x-forwarded-proto':'https'},body:'{}'});
+ assert.equal(bad.status,403);
+ assert.equal((await fetch(base+'/.env',forwarded)).status,404);
+});
+
+test('store refuses second writer and drains committed writes before releasing lock', async t => {
+ const dir=await mkdtemp(tmpdir()+'/jeffreyys-lock-'); t.after(()=>rm(dir,{recursive:true,force:true}));
+ const file=dir+'/state.json'; const store=await createStore(file,{demo:true});
+ await assert.rejects(createStore(file,{demo:true}),/locked/i);
+ const write=store.transact(s=>{s.settings.flatFee=42;});
+ await store.close(); await write;
+ const reopened=await createStore(file,{demo:true});
+ assert.equal(reopened.read().settings.flatFee,42); await reopened.close();
+ await assert.rejects(store.transact(()=>{}),/closed/i);
+});
+import { createApp } from './app.js';
+test('non-demo authentication uses strong PINs and forbids demo reset', async t => {
+ const dir=await mkdtemp(tmpdir()+'/jeffreyys-authprod-');
+ const app=await createApp({dataFile:dir+'/state.json',bootstrap:{name:'Owner',pin:'9876543210'}});
+ const server=app.listen(0,'127.0.0.1'); await new Promise(r=>server.once('listening',r));
+ t.after(async()=>{server.closeAllConnections(); await new Promise(r=>server.close(r)); await app.locals.store.close(); await rm(dir,{recursive:true,force:true});});
+ const base='http://127.0.0.1:'+server.address().port;
+ const id=app.locals.store.read().employees[0].id;
+ const login=await fetch(base+'/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id,pin:'9876543210'})});
+ assert.equal(login.status,200);
+ const headers={'content-type':'application/json',cookie:login.headers.get('set-cookie').split(';')[0]};
+ const reset=await fetch(base+'/api/action',{method:'POST',headers,body:JSON.stringify({type:'reset',confirmation:'RESET'})});
+ assert.equal(reset.status,403);
+ const weak=await fetch(base+'/api/action',{method:'POST',headers,body:JSON.stringify({type:'saveEmployee',name:'Bad',role:'driver',hourlyRate:10,pin:'1234'})});
+ assert.equal(weak.status,400);
+ const strong=await fetch(base+'/api/action',{method:'POST',headers,body:JSON.stringify({type:'saveEmployee',name:'Worker',role:'driver',hourlyRate:10,pin:'0123456789'})});
+ assert.equal(strong.status,200);
+});
+import assert from 'node:assert/strict';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { createStore, checkPin } from './store.js';
+test('new non-demo store requires explicit bootstrap and never defaults to public accounts', async t => {
+ const dir=await mkdtemp(tmpdir()+'/jeffreyys-bootstrap-');
+ t.after(()=>rm(dir,{recursive:true,force:true}));
+ await assert.rejects(createStore(dir+'/missing.json'),/bootstrap/i);
+ const store=await createStore(dir+'/state.json',{bootstrap:{name:'Owner',pin:'9876543210'}});
+ const s=store.read(); assert.equal(s.employees.length,1); assert.equal(s.orders.length,0);
+ assert.equal(s.employees[0].role,'chef'); assert.equal(s.employees[0].demo,false);
+ assert.ok(checkPin('9876543210',s.employees[0].pinHash));
+ await store.close();
+});

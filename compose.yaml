@@ -1,0 +1,35 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${APP_PORT:-3001}:3001"
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3001
+      DATA_FILE: /app/data/state.json
+      APP_ORIGIN: ${APP_ORIGIN:?Set APP_ORIGIN to the public HTTPS origin}
+      TRUST_PROXY: ${TRUST_PROXY:-loopback}
+      COOKIE_SECURE: "true"
+      BOOTSTRAP_NAME: ${BOOTSTRAP_NAME:-Owner}
+      BOOTSTRAP_PIN_FILE: /run/secrets/bootstrap_pin
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+    secrets:
+      - bootstrap_pin
+    volumes:
+      - jeffreyys_data:/app/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+secrets:
+  bootstrap_pin:
+    file: ./secrets/bootstrap_pin
+
+volumes:
+  jeffreyys_data:

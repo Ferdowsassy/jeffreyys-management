@@ -1,0 +1,4 @@
+import {chromium} from '@playwright/test';
+import assert from 'node:assert/strict';
+const browser=await chromium.launch({headless:true});
+try {for(const host of ['127.0.0.1','localhost']){const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('response',async r=>{if(r.url().includes('/api/login'))console.log(host,'login',r.status(),await r.text())});await page.goto(`http://${host}:5173`);await page.getByRole('button',{name:/Alex/}).click();await page.locator('input[type=password]').fill('1234');await page.getByRole('button',{name:'Anmelden'}).click();await page.waitForTimeout(1200);console.log(host,'errors',errors,'body', (await page.locator('body').innerText()).slice(-1400));assert.equal(await page.locator('.sidebar').count(),1,'Login should show workspace');await page.close();}}finally{await browser.close()}
