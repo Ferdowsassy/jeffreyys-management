@@ -25,7 +25,9 @@ export async function createApp({
   if (production && (demo || !secureCookie || !origin || new URL(origin).protocol !== "https:"))
     throw new Error("Production requires HTTPS APP_ORIGIN, secure cookies and DEMO_MODE=false");
   if (origin && new URL(origin).origin !== origin) throw new Error("APP_ORIGIN must be an exact origin without a path");
-  if (trustProxy === true || typeof trustProxy === "number") throw new Error("Trust only explicit proxy IPs/subnets, never all proxies or hop counts");\n  if (assumeHttps && (!production || !origin || new URL(origin).protocol !== "https:"))\n    throw new Error("HTTPS proxy mode requires production and an HTTPS APP_ORIGIN");
+  if (trustProxy === true || typeof trustProxy === "number") throw new Error("Trust only explicit proxy IPs/subnets, never all proxies or hop counts");
+  if (assumeHttps && (!production || !origin || new URL(origin).protocol !== "https:"))
+    throw new Error("HTTPS proxy mode requires production and an HTTPS APP_ORIGIN");
   if (staticDir) await access(resolve(staticDir, "index.html"));
   const store = await createStore(dataFile, { demo, bootstrap }),
     app = express(),

@@ -19,7 +19,8 @@ test("Hostinger can require the configured ESM entrypoint directly", async (t) =
         PORT: "0",
         DATA_FILE: `${dir}/state.json`,
         APP_ORIGIN: "https://workspace.example",
-        TRUST_PROXY: "loopback",\n        HTTPS_BEHIND_PROXY: "true",
+        TRUST_PROXY: "loopback",
+        HTTPS_BEHIND_PROXY: "true",
         BOOTSTRAP_NAME: "Owner",
         BOOTSTRAP_PIN_FILE: `${dir}/pin`,
       },
@@ -51,7 +52,8 @@ test("Hostinger can require the configured ESM entrypoint directly", async (t) =
     });
   });
 
-  assert.equal((await fetch(`${base}/healthz`)).status, 200);\n  assert.equal((await fetch(`${base}/`)).status, 200);
+  assert.equal((await fetch(`${base}/healthz`)).status, 200);
+  assert.equal((await fetch(`${base}/`)).status, 200);
   const exit = new Promise((resolve) => child.once("exit", resolve));
   child.kill("SIGTERM");
   assert.equal(await exit, 0);
