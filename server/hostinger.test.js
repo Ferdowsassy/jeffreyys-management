@@ -4,12 +4,12 @@ import { spawn } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 
-test("Hostinger CommonJS launcher can require the ESM application", async (t) => {
+test("Hostinger can require the configured ESM entrypoint directly", async (t) => {
   const dir = await mkdtemp(`${tmpdir()}/jeffreyys-hostinger-`);
   await writeFile(`${dir}/pin`, "9876543210", { mode: 0o600 });
   const child = spawn(
     process.execPath,
-    ["-e", 'require("./hostinger.cjs")'],
+    ["-e", 'require("./server/index.js")'],
     {
       env: {
         ...process.env,
