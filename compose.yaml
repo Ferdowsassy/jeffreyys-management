@@ -9,6 +9,12 @@ services:
       HOST: 0.0.0.0
       PORT: 3001
       DATA_FILE: /app/data/state.json
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-file}
+      DB_HOST: ${DB_HOST:-}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_NAME: ${DB_NAME:-}
+      DB_USER: ${DB_USER:-}
+      DB_PASSWORD: ${DB_PASSWORD:-}
       APP_ORIGIN: ${APP_ORIGIN:?Set APP_ORIGIN to the public HTTPS origin}
       TRUST_PROXY: ${TRUST_PROXY:-loopback}
       COOKIE_SECURE: "true"

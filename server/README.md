@@ -1,6 +1,6 @@
 # Jeffreyys local API
 
-Node ES modules + Express; no database or authentication dependency. Run from the project root:
+Node ES modules + Express with MySQL/MariaDB production persistence. Run from the project root:
 
 ```sh
 node server/index.js
@@ -116,8 +116,10 @@ Set `OPENAI_API_KEY` in the backend process environment; optionally `OPENAI_MODE
 
 ## Persistence and operational boundaries
 
-Every transaction clones current state, validates and applies changes, writes a mode-0600 temporary JSON file, fsyncs it, atomically renames it, and only then publishes the new state and SSE invalidation. Transactions are serialized; failed validation does not mutate committed state. A malformed existing JSON file fails startup instead of silently resetting data. The data directory is created mode 0700. Local filesystem access still allows reading personal information and offline brute force of short PINs: secure the computer and backups.
+Production on Hostinger uses `mysql2` with InnoDB tables `jm_employees`, `jm_orders`, `jm_shifts`, `jm_schedule`, `jm_zones`, `jm_tasks`, `jm_handoffs`, `jm_audit`, and `jm_metadata`. Each record occupies its own database row; its validated fields are stored in a JSON column. This is database storage, not a JSON file. Queries use parameterized values. The metadata row lock serializes business transactions across connections; failed changes roll back, and a killed process cannot leave a stale lock file.
 
-One process only. This is not multi-process locking, a distributed database, backup automation or a public production service. The export is intentionally credential-free and is not a full restore file. No routing/geocoding provider is used; saveLocation records a point but does not infer travel routes.
+State is refreshed from database revisions before requests. SSE subscribers also check for committed external changes every two seconds. Sessions and rate limits are still process-local: deploy a single serving instance; users sign in again after an app restart. This does not provide a settlement ledger, statutory payroll calculation, tax engine, or geocoding provider.
+
+The legacy filesystem store remains for local demos, existing file deployments, and isolated regression tests. MySQL configuration never falls back silently to it.
 
 Tests cover real HTTP auth, role isolation, unauthorized writes, financial snapshots/cash reconciliation, validation/rollback, concurrent persistence, SSE, origin enforcement/rate limits, demo lifecycle, missing-key AI behavior, and the standalone entrypoint. Tests use isolated temporary data files and do not alter the running app's database.
