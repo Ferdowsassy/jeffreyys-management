@@ -1,0 +1,4 @@
+AddType application/manifest+json .webmanifest
+<FilesMatch "^(sw\.js|manifest\.webmanifest)$">
+  Header set Cache-Control "no-cache, max-age=0, must-revalidate"
+</FilesMatch>
