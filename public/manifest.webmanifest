@@ -1,0 +1,18 @@
+{
+  "id": "/",
+  "name": "Jeffreyys Team Workspace",
+  "short_name": "Jeffreyys",
+  "description": "Schichten, Lieferungen und Teamverwaltung für Jeffreyys.",
+  "lang": "de",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fcfcf8",
+  "theme_color": "#ee5c35",
+  "prefer_related_applications": false,
+  "icons": [
+    {"src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}

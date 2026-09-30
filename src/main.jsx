@@ -26,6 +26,14 @@ import {
 import { euro, day, sum, hours } from "./finance";
 import { Management, Driver, Schedule, Analytics } from "./pages";
 import "./style.css";
+import { InstallApp } from "./install-app";
+
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js', {updateViaCache:'none'})
+      .catch(error => console.error('App installation support unavailable:', error));
+  }, {once:true});
+}
 export async function api(path, body) {
   const r = await fetch("/api/" + path, {
     credentials: "same-origin",
@@ -239,6 +247,7 @@ function Login({ onLogin, notify }) {
             <>Geschützter Teamzugang · Zugangsdaten bei der Leitung erfragen.</>
           )}
         </div>
+        <InstallApp />
       </main>
     </div>
   );
@@ -399,6 +408,7 @@ function App() {
             </React.Fragment>
           ))}
         </nav>
+        <InstallApp />
         <div className="sidebar-bottom">
           <span className="avatar orange">{user.name.slice(0, 2)}</span>
           <div>

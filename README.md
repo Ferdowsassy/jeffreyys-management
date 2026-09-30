@@ -28,6 +28,14 @@ Production on Hostinger uses its managed MySQL/MariaDB database. Employees, orde
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for Hostinger configuration, migration, verification, and backups. The local JSON adapter remains available for isolated tests and local demo use.
 
+## Install as an app
+
+Open the HTTPS site and select **App installieren** on the login screen or in the sidebar. Supported browsers offer their native install prompt; other browsers show installation instructions, including Safari's **Zum Home-Bildschirm** on iPhone/iPad. The app opens in a standalone window after installation.
+
+An offline launch shows a reconnect screen. Shifts, orders, sessions, customer information, and payroll are never cached by the service worker, and writes require an internet connection. Application HTML and scripts always come from the network so a worker cannot retain an outdated deployment.
+
+`node scripts/pwa-check.mjs` verifies the built app locally; `PWA_ORIGIN=https://jeffreys-burger.app node scripts/pwa-check.mjs` runs the same read-only checks against production.
+
 ## Commands
 
 - `npm run dev` — Vite development server

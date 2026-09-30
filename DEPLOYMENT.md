@@ -64,6 +64,19 @@ Use Hostinger database backups or a private `mysqldump --single-transaction` exp
 
 Before each release, save a private copy of the active release and backend configuration. Roll back application code to its saved release while retaining MySQL configuration. Do not revert to the old JSON store after new database writes: it would discard activity recorded since migration. Database restore requires a matching backup and a maintenance window.
 
+## PWA hosting
+
+The Vite build copies the manifest, icons, service worker, offline page, and hosting header rules from `public/` into `dist/`. Serve `/sw.js` from the origin root with JavaScript MIME type; the manifest uses `application/manifest+json`. Preserve these additions in the static document root's `.htaccess`:
+
+```apache
+AddType application/manifest+json .webmanifest
+<FilesMatch "^(sw\\.js|manifest\\.webmanifest)$">
+  Header set Cache-Control "no-cache, max-age=0, must-revalidate"
+</FilesMatch>
+```
+
+Run `PWA_ORIGIN=https://jeffreys-burger.app node scripts/pwa-check.mjs` after deployment. This verifies manifest/icons, Chromium installability, worker control, offline fallback, reconnect, and absence of private/API data in worker caches. Only public offline assets are cached. Keep `/api`, SSE, sessions, and all writes online.
+
 ## Optional AI
 
 Receipt extraction and the coach require a backend `OPENAI_API_KEY`; `OPENAI_MODEL` defaults to `gpt-4o-mini`. Without a key, those endpoints explicitly report that AI is not configured. Manual order entry and the rest of the app remain available. The key must never be placed in a browser build or committed to Git.
