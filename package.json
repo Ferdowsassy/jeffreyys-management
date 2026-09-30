@@ -17,18 +17,18 @@
     "verify": "npm run build && npm test && npm run test:ui"
   },
   "dependencies": {
+    "@tesseract.js-data/deu": "^1.0.0",
+    "@tesseract.js-data/eng": "^1.0.0",
+    "@vitejs/plugin-react": "^4.7.0",
     "express": "^5.1.0",
     "lucide-react": "^0.468.0",
     "mysql2": "^3.24.5",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "tesseract.js": "^7.0.0"
+    "tesseract.js": "^7.0.0",
+    "vite": "^7.0.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.55.0",
-    "@tesseract.js-data/deu": "^1.0.0",
-    "@tesseract.js-data/eng": "^1.0.0",
-    "@vitejs/plugin-react": "^4.7.0",
-    "vite": "^7.0.0"
+    "@playwright/test": "^1.55.0"
   }
 }
