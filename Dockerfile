@@ -6,6 +6,8 @@ RUN npm ci
 COPY index.html vite.config.js ./
 COPY src ./src
 COPY shared ./shared
+COPY public ./public
+COPY scripts/prepare-ocr.mjs ./scripts/prepare-ocr.mjs
 RUN npm run build
 
 # Run the single-process Express application

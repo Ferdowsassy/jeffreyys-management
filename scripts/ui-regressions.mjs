@@ -36,12 +36,10 @@ try {
  if (scenario==='receipt'||scenario==='all') {
   await context.request.post(base+'/api/logout',{data:{}});
   await login('Leo','3456');
-  // Contract fixture only: this tests draft-to-form mapping, not live AI inference.
-  await page.route('**/api/ai/receipt',route=>route.fulfill({json:{draft:{address:'Teststraße 12',postalCode:'80802',city:'München',amount:27.5,payment:'cash',orderNumber:'SCAN-1'},requiresReview:true}}));
-  await page.locator('input[type=file]').setInputFiles({name:'receipt.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j1ioAAAAASUVORK5CYII=','base64')});
-  await expect(page.getByLabel('Bestellnummer',{exact:true})).toHaveValue('SCAN-1');
+  await page.locator('input[type=file]').setInputFiles(resolve('scripts/fixtures/demo-receipt.png'));
+  await expect(page.getByLabel('Bestellnummer',{exact:true})).toHaveValue('SCAN-123',{timeout:90000});
   await expect(page.getByLabel('Betrag (€)',{exact:true})).toHaveValue('27.5');
-  console.log('PASS receipt draft fills reviewed form');
+  console.log('PASS local OCR fills reviewed receipt form');
  }
  if (scenario==='sse'||scenario==='all') {
   await context.request.post(base+'/api/logout',{data:{}});

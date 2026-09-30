@@ -79,4 +79,4 @@ Run `PWA_ORIGIN=https://jeffreys-burger.app node scripts/pwa-check.mjs` after de
 
 ## Optional AI
 
-Receipt extraction and the coach require a backend `OPENAI_API_KEY`; `OPENAI_MODEL` defaults to `gpt-4o-mini`. Without a key, those endpoints explicitly report that AI is not configured. Manual order entry and the rest of the app remain available. The key must never be placed in a browser build or committed to Git.
+Receipt scanning needs no API key: the browser loads self-hosted OCR assets from `/ocr/`, reads the image locally, and presents editable fields for review before saving through the normal order API. `npm run build` generates the worker, WASM and language assets; keep them in the deployed `dist` directory. The first scan downloads these assets, so initial recognition can be slower on mobile. OCR can misread text: users must compare the draft with the original photo. The optional coach requires a backend `OPENAI_API_KEY`; `OPENAI_MODEL` defaults to `gpt-4o-mini`. Never place the key in a browser build or commit it to Git.
