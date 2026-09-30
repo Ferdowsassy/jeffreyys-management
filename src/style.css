@@ -104,8 +104,21 @@ p {
 }
 .app {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
 }
+
+.install-app { margin-top: 20px; }
+.install-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 9px; background: transparent; color: inherit; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.install-button:hover { background: #f0efe8; }
+.sidebar > .install-app { margin-top: auto; margin-bottom: 12px; }
+.sidebar > .install-app .install-button { width: 100%; }
+.install-dialog { border: 1px solid var(--line); border-radius: 18px; width: min(440px, calc(100vw - 32px)); padding: 28px; background: #fcfcf8; color: #25241f; box-shadow: 0 20px 80px #0003; }
+.install-dialog::backdrop { background: #0007; }
+.install-dialog form { float: right; }
+.install-dialog img { border-radius: 12px; }
+.install-dialog h2 { margin: 18px 0 12px; font-size: 24px; }
+.install-dialog p { line-height: 1.6; font-size: 14px; color: #68685e; }
 .sidebar {
   width: 226px;
   position: fixed;
