@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { api, Title, Panel, Form, Empty, Badge, roleName } from "./main";
 import { euro, day, sum, hours, payroll } from "./finance";
+import { scanReceipt } from "./receipt-ocr";
 const today = () => day(Date.now());
 const person = (data, id) =>
   data.employees.find((e) => e.id === id)?.name || "Unbekannt";
@@ -874,9 +875,14 @@ function localTime(d) {
 export function Driver({ user, data, page, act, notify }) {
   const [form, setForm] = useState(false),
     [receipt, setReceipt] = useState({}),
+    [scan, setScan] = useState(null),
+    [scanBusy, setScanBusy] = useState(false),
+    [scanStatus, setScanStatus] = useState(''),
+    [scanPhoto, setScanPhoto] = useState(''),
     [tracking, setTracking] = useState(false),
     [tick, setTick] = useState(0);
   const watch = useRef(null);
+  useEffect(()=>()=>{if(scanPhoto)URL.revokeObjectURL(scanPhoto);},[scanPhoto]);
   const active = data.shifts.find((s) => s.employeeId === user.id && !s.end);
   useEffect(() => {
     const t = setInterval(() => setTick((t) => t + 1), 30000);
@@ -921,6 +927,7 @@ export function Driver({ user, data, page, act, notify }) {
       name: "payment",
       label: "Zahlungsart",
       options: [
+        { value: "", label: "Bitte wählen" },
         { value: "online", label: "Online bezahlt" },
         { value: "cash", label: "Bar" },
       ],
@@ -935,25 +942,23 @@ export function Driver({ user, data, page, act, notify }) {
     },
   ];
   async function photo(file) {
-    if (!file) return;
+    if (!file || scanBusy) return;
     if (file.size > 8 * 1024 * 1024) {
       notify("Bitte ein Foto kleiner als 8 MB wählen.");
       return;
     }
+    setScanBusy(true);
+    setScanStatus('Foto vorbereiten …');
     try {
-      const image = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-      const r = await api("ai/receipt", { image });
+      const r = await scanReceipt(file, setScanStatus);
       setReceipt(r.draft || {});
+      setScan(r);
+      setScanPhoto(URL.createObjectURL(file));
       setForm(true);
-      notify("KI-Vorschlag: bitte jedes Feld prüfen.");
+      notify("Beleg auf deinem Gerät gelesen. Bitte jedes Feld mit dem Foto vergleichen.");
     } catch (e) {
-      notify(e.message);
-    }
+      notify(e.message || 'Texterkennung fehlgeschlagen. Bitte Beleg manuell erfassen.');
+    } finally {setScanBusy(false);setScanStatus('');}
   }
   return (
     <>
@@ -1060,12 +1065,13 @@ export function Driver({ user, data, page, act, notify }) {
               </button>
               <label className="secondary file-button">
                 <Camera size={18} />
-                Beleg fotografieren
+                {scanBusy ? 'Beleg wird gelesen …' : 'Beleg fotografieren'}
                 <input
                   type="file"
                   accept="image/*"
                   capture="environment"
-                  onChange={(e) => photo(e.target.files[0])}
+                  disabled={scanBusy}
+                  onChange={(e) => {photo(e.target.files[0]);e.target.value='';}}
                 />
               </label>
             </div>
@@ -1090,11 +1096,18 @@ export function Driver({ user, data, page, act, notify }) {
           </button>
         </div>
       )}
+      {scanBusy && <div className="notice" role="status" aria-live="polite">{scanStatus} · Das Foto bleibt auf deinem Gerät.</div>}
       {form && (
         <Panel
           title="Beleg prüfen & übernehmen"
           subtitle="Keine automatische Buchung: Adresse, Betrag und Zahlungsart kontrollieren."
         >
+          {scan && <div className="receipt-review">
+            <p>Auf deinem Gerät gelesen · kein KI-Dienst. Vergleiche alle Angaben mit dem Originalbeleg, besonders Bestellnummer und Adresse.</p>
+            {scanPhoto && <details><summary>Originalbeleg anzeigen</summary><img className="receipt-preview" src={scanPhoto} alt="Originalbeleg zum Vergleichen" /></details>}
+            {!!scan.warnings.length && <ul>{scan.warnings.map(message=><li key={message}>{message}</li>)}</ul>}
+            <details><summary>Gelesenen Text anzeigen</summary><pre>{scan.text}</pre></details>
+          </div>}
           <Form
             key={JSON.stringify(receipt)}
             initial={receipt}
@@ -1108,6 +1121,8 @@ export function Driver({ user, data, page, act, notify }) {
               });
               setForm(false);
               setReceipt({});
+              setScan(null);
+              setScanPhoto('');
             }}
           />
         </Panel>

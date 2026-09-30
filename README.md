@@ -50,4 +50,4 @@ An offline launch shows a reconnect screen. Shifts, orders, sessions, customer i
 
 Production refuses to start unless it has an HTTPS `APP_ORIGIN`, secure cookies, demo mode disabled, complete MySQL credentials (or an explicit absolute `DATA_FILE` for legacy deployments), and an explicit initial owner name/PIN when creating a new store. Production PINs are 8–12 digits. The bootstrap PIN is read from a file rather than an environment variable. Session cookies are HttpOnly, Secure, and SameSite=Strict.
 
-The optional receipt/coach AI integration is disabled when `OPENAI_API_KEY` is absent. Receipt images are sent to OpenAI only when a user explicitly invokes receipt extraction.
+Receipt scanning runs on the device using self-hosted Tesseract OCR and deterministic parsing. It extracts a draft for review; photos are never uploaded by the scanner. German and English OCR assets are generated during `npm run build`. The optional coach requires a backend `OPENAI_API_KEY`.

@@ -108,6 +108,8 @@ Payroll is a live all-record summary, not a legally certified payslip or a settl
 
 ## Optional real AI
 
+The driver receipt scanner uses on-device Tesseract OCR, self-hosted assets and deterministic field parsing. It never invokes the legacy AI receipt endpoint below. Users review and correct extracted fields before the normal validated `addOrder` transaction; the photo and raw OCR text are not saved or uploaded.
+
 Set `OPENAI_API_KEY` in the backend process environment; optionally `OPENAI_MODEL` (default `gpt-4o-mini`). Do not put keys into frontend variables. Calls go to OpenAI Chat Completions with a 45-second timeout. No fabricated fallback exists.
 
 - `POST /api/ai/receipt` (driver/chef): `{image:'data:image/jpeg;base64,...'}` (`imageDataUrl` alias accepted; PNG/JPEG/WebP). Response `{draft:{address,postalCode,city,amount,payment,orderNumber},requiresReview:true,warning}`. Missing/uncertain fields are requested as null. **Every field must be reviewed against the original**; model output is untrusted and is not automatically persisted. Saving still uses validated `addOrder`. Uploaded receipt images are transmitted to OpenAI only when this endpoint is invoked.
