@@ -1,108 +1,69 @@
-# Deployment guide
+# Hostinger deployment
 
-## Supported deployment shape
+## Runtime
 
-Run one container, one process, and one persistent volume. Do not configure multiple replicas or serverless/ephemeral storage. The JSON store uses an exclusive lock and intentionally refuses a second writer.
+Use Hostinger Node.js hosting with Node 22 or 24, build command `npm run build`, and startup file `hostinger.cjs`. Serve the built client and Express API from the same application. Deploy one serving instance because sessions and rate limits are process-local.
 
-Use an HTTPS reverse proxy or managed load balancer in front of port 3001. Compose binds that port to `127.0.0.1` only. The proxy must preserve `Host`, set `X-Forwarded-Proto: https`, support Server-Sent Events without buffering, and allow connections lasting longer than 15 seconds. Except for `/healthz`, production rejects requests that Express cannot verify arrived through HTTPS.
+Set these backend environment variables in hPanel. Never use frontend `VITE_` variables for secrets:
 
-## First deployment with Docker Compose
-
-1. Copy the public configuration template:
-
-   ```bash
-   cp .env.example .env
-   ```
-
-2. Set `APP_ORIGIN` to the exact public HTTPS origin, with no path or trailing slash. Set `TRUST_PROXY` to the explicit proxy IP/subnet that connects to the container. `loopback` is correct only when the proxy runs on the same host/network namespace.
-
-3. Create the bootstrap secret without committing it:
-
-   ```bash
-   mkdir -p secrets
-   umask 077
-   printf '%s' 'CHOOSE-AN-8-TO-12-DIGIT-PIN' > secrets/bootstrap_pin
-   ```
-
-   Replace the placeholder with an 8–12 digit PIN. Do not send the PIN in chat or commit it. The secret is used only when the data file does not yet exist.
-
-4. Validate and launch:
-
-   ```bash
-   docker compose config --quiet
-   docker compose build
-   docker compose up -d
-   docker compose ps
-   curl --fail http://127.0.0.1:${APP_PORT:-3001}/healthz
-   ```
-
-5. Complete the first login through the public HTTPS URL using `BOOTSTRAP_NAME` and the bootstrap PIN. Create separate kitchen/driver accounts immediately. The owner account starts with an hourly rate of zero, which can be updated in Team settings.
-
-6. Keep `secrets/bootstrap_pin` available to Docker Compose (or replace it with a platform-managed secret). Existing stores no longer read or reapply it during app startup, but Compose still requires the declared secret source when recreating the container. A new or restored empty volume requires the secret value.
-
-## Required environment
-
-- `APP_ORIGIN` — exact public `https://` origin; required.
-- `DATA_FILE` — absolute path on persistent storage; Compose sets `/app/data/state.json`.
-- `BOOTSTRAP_NAME` — initial owner display name for a new store.
-- `BOOTSTRAP_PIN_FILE` — file containing the initial 8–12 digit PIN.
-- `TRUST_PROXY` — explicit proxy IP/subnet list; never `true` or a hop count.
-- `COOKIE_SECURE=true` — required in production.
-- `HOST=0.0.0.0`, `PORT=3001` — container listener.
-- `OPENAI_API_KEY` / `OPENAI_MODEL` — optional; leave the key unset to disable AI.
-
-## Reverse proxy checks
-
-After HTTPS is configured, verify:
-
-```bash
-curl --fail https://YOUR_HOST/healthz
-curl --fail https://YOUR_HOST/
+```dotenv
+NODE_ENV=production
+APP_ORIGIN=https://jeffreys-burger.app
+COOKIE_SECURE=true
+DEMO_MODE=false
+HTTPS_BEHIND_PROXY=true
+HOST=127.0.0.1
+PORT=3000
+STORAGE_BACKEND=mysql
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=YOUR_HOSTINGER_DATABASE
+DB_USER=YOUR_HOSTINGER_DATABASE_USER
+DB_PASSWORD="YOUR_DATABASE_PASSWORD"
 ```
 
-Then sign in in a browser and confirm the header says `Live verbunden`. If it does not, disable proxy buffering for `/api/events` and increase read timeouts.
+Use `HTTPS_BEHIND_PROXY=true` only when the app is reachable exclusively through Hostinger's HTTPS frontend. For an ordinary reverse proxy, disable it and configure explicit `TRUST_PROXY` IPs/subnets instead.
 
-## Backup
+`localhost` is the managed database hostname for this verified Hostinger deployment. It is not the website domain. MySQL creates the `jm_*` InnoDB tables on startup; the database user needs CREATE, SELECT, INSERT, UPDATE, and DELETE privileges. Incomplete DB settings cause startup to fail; they never trigger file storage.
 
-The authoritative data is the persistent `state.json`. Stop the app or use a volume snapshot that guarantees a consistent point-in-time copy.
+For a new empty database, set `BOOTSTRAP_NAME` and `BOOTSTRAP_PIN_FILE` to a private file containing an 8–12 digit PIN. Existing MySQL databases never read or reapply this secret. `DB_CONFIG_FILE` optionally loads database settings from a mode-0600 environment file outside the application/public directory.
 
-Compose example:
+## Migrate existing records
 
-```bash
-docker compose stop app
-mkdir -p backups
-STAMP=$(date +%Y%m%d-%H%M%S)
-docker run --rm -v jeffreyys-management_jeffreyys_data:/data:ro -v "$PWD/backups:/backup" alpine \
-  sh -c "cp /data/state.json /backup/state-$STAMP.json"
-docker compose start app
+1. Stop requests to the old application and verify no process can write the old store.
+2. Back up the existing release, hosting configuration, and `state.json` in a private directory outside the public web root.
+3. Configure the new empty Hostinger database. Run:
+
+   ```sh
+   DB_CONFIG_FILE=/absolute/private/database.env node scripts/migrate-mysql.mjs /absolute/private/state.json
+   ```
+
+4. The migration preserves every record, account ID, PIN hash, and setting. It validates the data and writes all tables in one transaction. It refuses to overwrite an initialized database. Reopen the database and compare the migrated records to the original before switching the app.
+5. Deploy the verified build, activate MySQL environment variables, and restart the application through Hostinger.
+6. Verify `/healthz` returns `{"status":"ok","storage":"mysql"}`, log in with existing accounts, check role isolation, and verify live updates and persistence after restart.
+
+The old JSON file remains only as a private migration backup. The running MySQL application does not read or write it.
+
+## Verification
+
+```sh
+npm ci
+npm run verify
+# Optional real MariaDB integration tests, using an existing local server:
+MYSQL_TEST_SOCKET=/tmp/mysql.sock node --test server/mysql.test.js
+curl --fail https://jeffreys-burger.app/healthz
+# Read-only smoke check using an existing account (PIN file stays private):
+LIVE_ORIGIN=https://jeffreys-burger.app LIVE_PIN_FILE=/private/owner_pin node scripts/live-check.mjs
 ```
 
-Encrypt backups because they contain customer addresses, payroll estimates, and operational data. Test restore regularly. The chef JSON export is sanitized and **is not** a complete restore backup.
+The MySQL test creates and drops only a uniquely named disposable `jm_test_*` database. It checks migration, rollback after partial SQL writes, two independent writers, restart persistence, HTTP role restrictions, delivery cash reconciliation, and cross-connection SSE updates.
 
-## Restore
+## Backups and rollback
 
-```bash
-docker compose down
-# Replace BACKUP.json with the selected known-good file.
-docker run --rm -v jeffreyys-management_jeffreyys_data:/data -v "$PWD/backups:/backup:ro" alpine \
-  sh -c "cp /backup/BACKUP.json /data/state.json && chown 1000:1000 /data/state.json && chmod 600 /data/state.json"
-docker compose up -d
-curl --fail http://127.0.0.1:${APP_PORT:-3001}/healthz
-```
+Use Hostinger database backups or a private `mysqldump --single-transaction` export of the complete database. The in-app export omits credential hashes and is not a restore backup. Preserve existing backups and test restore into a separate database.
 
-Never remove `state.json.lock` while an app process is running. If startup reports a stale lock after a host crash, first prove no container/process uses the volume, back up the volume, then remove only the `.lock` file.
+Before each release, save a private copy of the active release and backend configuration. Roll back application code to its saved release while retaining MySQL configuration. Do not revert to the old JSON store after new database writes: it would discard activity recorded since migration. Database restore requires a matching backup and a maintenance window.
 
-## Upgrade and rollback
+## Optional AI
 
-Before upgrading: run `npm run verify`, make a backup, then rebuild and restart one instance. Check `/healthz`, login, and live updates. For rollback, restore the previous image and—if the data format changed—the paired pre-upgrade backup.
-
-## Current limits
-
-- single process / single replica only;
-- no built-in automated backup scheduler;
-- in-memory sessions are lost on restart;
-- no statutory payroll/tax/overtime engine;
-- no multi-tenant separation;
-- AI live calls require a separately managed OpenAI key and were not part of offline verification.
-
-For multi-replica or high-availability deployment, migrate persistence, sessions, rate limits, and events to shared services before scaling.
+Receipt extraction and the coach require a backend `OPENAI_API_KEY`; `OPENAI_MODEL` defaults to `gpt-4o-mini`. Without a key, those endpoints explicitly report that AI is not configured. Manual order entry and the rest of the app remain available. The key must never be placed in a browser build or committed to Git.

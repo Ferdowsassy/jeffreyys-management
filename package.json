@@ -17,14 +17,15 @@
     "verify": "npm run build && npm test && npm run test:ui"
   },
   "dependencies": {
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
+    "express": "^5.1.0",
     "lucide-react": "^0.468.0",
-    "express": "^5.1.0"
+    "mysql2": "^3.24.5",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
   },
   "devDependencies": {
-    "vite": "^7.0.0",
+    "@playwright/test": "^1.55.0",
     "@vitejs/plugin-react": "^4.7.0",
-    "@playwright/test": "^1.55.0"
+    "vite": "^7.0.0"
   }
 }

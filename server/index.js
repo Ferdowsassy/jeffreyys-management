@@ -3,13 +3,17 @@ import { readFile, access } from "node:fs/promises";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import { isAbsolute } from "node:path";
+import { databaseConfig } from "./mysql-store.js";
+
+if (process.env.DB_CONFIG_FILE) process.loadEnvFile(process.env.DB_CONFIG_FILE);
+const database = databaseConfig();
 
 const production = process.env.NODE_ENV === "production";
 const port = Number(process.env.PORT ?? 3001);
 const host = process.env.HOST || "127.0.0.1";
 if (!Number.isInteger(port) || port < 0 || port > 65535)
   throw new Error("PORT must be a valid TCP port");
-if (production && (!process.env.DATA_FILE || !isAbsolute(process.env.DATA_FILE)))
+if (production && !database && (!process.env.DATA_FILE || !isAbsolute(process.env.DATA_FILE)))
   throw new Error("Production DATA_FILE must be an absolute path on persistent local storage");
 const proxy = process.env.TRUST_PROXY;
 if (proxy && /^(true|\d+)$/i.test(proxy))
@@ -33,7 +37,7 @@ async function initialize() {
   let bootstrap;
   if (!demo) {
     let storeExists = false;
-    if (process.env.DATA_FILE) {
+    if (!database && process.env.DATA_FILE) {
       try {
         await access(process.env.DATA_FILE);
         storeExists = true;
@@ -41,18 +45,21 @@ async function initialize() {
         if (error.code !== "ENOENT") throw error;
       }
     }
-    if (!storeExists)
-      bootstrap = {
+    if (!storeExists) {
+      const loadBootstrap = async () => ({
         name: process.env.BOOTSTRAP_NAME,
         pin: process.env.BOOTSTRAP_PIN_FILE
           ? (await readFile(process.env.BOOTSTRAP_PIN_FILE, "utf8")).trim()
           : undefined,
-      };
+      });
+      bootstrap = database ? loadBootstrap : await loadBootstrap();
+    }
   }
 
   const created = await createApp({
     production,
     dataFile: process.env.DATA_FILE,
+    database,
     demo,
     origin: process.env.APP_ORIGIN,
     trustProxy:

@@ -24,15 +24,9 @@ The Vite client is at `http://127.0.0.1:5173`; its `/api` requests proxy to `htt
 
 ## Production
 
-The app is a **single-instance application backed by one local JSON file**. It is suitable for a small deployment only when all of these are true:
+Production on Hostinger uses its managed MySQL/MariaDB database. Employees, orders, shifts, schedules, zones, tasks, handoffs, and audit records are stored in separate InnoDB tables. Writes commit atomically and survive application restarts. There is no JSON data file in the MySQL deployment.
 
-- exactly one app process writes the data file;
-- `/app/data` is persistent storage with regular backups;
-- HTTPS terminates at a reverse proxy;
-- the deployment platform supports a persistent volume and graceful shutdown;
-- horizontal scaling is disabled.
-
-See [DEPLOYMENT.md](DEPLOYMENT.md) for Docker, first-run bootstrap, reverse-proxy requirements, backups, restore, health checks, upgrades, and limitations.
+See [DEPLOYMENT.md](DEPLOYMENT.md) for Hostinger configuration, migration, verification, and backups. The local JSON adapter remains available for isolated tests and local demo use.
 
 ## Commands
 
@@ -46,6 +40,6 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for Docker, first-run bootstrap, reverse-prox
 
 ## Security defaults
 
-Production refuses to start unless it has an HTTPS `APP_ORIGIN`, secure cookies, demo mode disabled, an absolute persistent `DATA_FILE`, and an explicit initial owner name/PIN when creating a new store. Production PINs are 8–12 digits. The bootstrap PIN is read from a file rather than an environment variable. Session cookies are HttpOnly, Secure, and SameSite=Strict.
+Production refuses to start unless it has an HTTPS `APP_ORIGIN`, secure cookies, demo mode disabled, complete MySQL credentials (or an explicit absolute `DATA_FILE` for legacy deployments), and an explicit initial owner name/PIN when creating a new store. Production PINs are 8–12 digits. The bootstrap PIN is read from a file rather than an environment variable. Session cookies are HttpOnly, Secure, and SameSite=Strict.
 
 The optional receipt/coach AI integration is disabled when `OPENAI_API_KEY` is absent. Receipt images are sent to OpenAI only when a user explicitly invokes receipt extraction.
