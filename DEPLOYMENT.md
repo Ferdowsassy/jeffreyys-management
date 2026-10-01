@@ -4,6 +4,8 @@
 
 Use Hostinger Node.js hosting with Node 22 or 24, build command `npm run build`, and startup file `hostinger.cjs`. Serve the built client and Express API from the same application. Deploy one serving instance because sessions and rate limits are process-local.
 
+Hostinger can install dependencies with `NODE_ENV=production`, which omits development dependencies. Keep Vite, its React plugin and the OCR language packages in `dependencies`: they are required by the build before the server starts. Playwright remains a development dependency. A clean `NODE_ENV=production npm ci --omit=dev` followed by `NODE_ENV=production npm run build` must succeed.
+
 Set these backend environment variables in hPanel. Never use frontend `VITE_` variables for secrets:
 
 ```dotenv
