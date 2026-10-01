@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Plus,
   ArrowUpRight,
@@ -944,36 +944,13 @@ export function Driver({ user, data, page, act, notify }) {
     [scanBusy, setScanBusy] = useState(false),
     [scanStatus, setScanStatus] = useState(''),
     [scanPhoto, setScanPhoto] = useState(''),
-    [tracking, setTracking] = useState(false),
     [tick, setTick] = useState(0);
-  const watch = useRef(null);
   useEffect(()=>()=>{if(scanPhoto)URL.revokeObjectURL(scanPhoto);},[scanPhoto]);
   const active = data.shifts.find((s) => s.employeeId === user.id && !s.end);
   useEffect(() => {
     const t = setInterval(() => setTick((t) => t + 1), 30000);
     return () => clearInterval(t);
   }, []);
-  useEffect(() => {
-    if (tracking && active) {
-      watch.current = navigator.geolocation?.watchPosition(
-        (p) =>
-          api("action", {
-            type: "saveLocation",
-            latitude: p.coords.latitude,
-            longitude: p.coords.longitude,
-          }).catch((e) => notify(e.message)),
-        (e) => {
-          notify(e.message);
-          setTracking(false);
-        },
-        { enableHighAccuracy: true, maximumAge: 30000 },
-      );
-    }
-    return () => {
-      if (watch.current !== null)
-        navigator.geolocation?.clearWatch(watch.current);
-    };
-  }, [tracking, active?.id]);
   const orders = data.orders.filter((o) => o.employeeId === user.id),
     open = orders.filter((o) => o.status === "open"),
     todays = orders.filter((o) => day(o.createdAt) === today());
@@ -1098,7 +1075,6 @@ export function Driver({ user, data, page, act, notify }) {
                             )
                           : true;
                       await act("clockOut", { cashConfirmed });
-                      setTracking(false);
                     } else await act("clockIn");
                   } catch {}
                 }}
@@ -1107,22 +1083,6 @@ export function Driver({ user, data, page, act, notify }) {
                 {active ? "Ausstempeln" : "Jetzt einstempeln"}
               </button>
             </div>
-            {active && user.role === "driver" && (
-              <div className="notice">
-                <button
-                  className="text-button"
-                  onClick={() => setTracking(!tracking)}
-                >
-                  {tracking
-                    ? "Standortfreigabe stoppen"
-                    : "Standortfreigabe aktivieren"}
-                </button>
-                <p>
-                  Nur während deiner Schicht und nach Zustimmung. Browser können
-                  die Erfassung im Hintergrund unterbrechen.
-                </p>
-              </div>
-            )}
           </Panel>
           {user.role === "driver" && (
             <div className="quick-actions">
@@ -1155,7 +1115,7 @@ export function Driver({ user, data, page, act, notify }) {
                     (o) => o.amount,
                   ),
                 )} Bar`
-              : "Navigation öffnet Google Maps. Standortfreigabe wird pausiert."}
+              : "Navigation öffnet Google Maps. Für GPS-Updates die App geöffnet lassen."}
           </span>
           <button className="primary" onClick={() => setForm(!form)}>
             <Plus size={17} />
@@ -1234,7 +1194,6 @@ export function Driver({ user, data, page, act, notify }) {
                       }
                       target="_blank"
                       rel="noreferrer"
-                      onClick={() => setTracking(false)}
                     >
                       <MapPin size={17} />
                       Maps öffnen

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import {
   LayoutDashboard,
@@ -27,6 +27,8 @@ import { euro, day, sum, hours } from "./finance";
 import { Management, Driver, Schedule, Analytics } from "./pages";
 import "./style.css";
 import { InstallApp } from "./install-app";
+import { useDriverLocation } from "./location-sharing";
+const LiveDriverMap = lazy(() => import("./driver-map"));
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -34,9 +36,10 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
       .catch(error => console.error('App installation support unavailable:', error));
   }, {once:true});
 }
-export async function api(path, body) {
+export async function api(path, body, options = {}) {
   const r = await fetch("/api/" + path, {
     credentials: "same-origin",
+    signal: options.signal,
     ...(body
       ? {
           method: "POST",
@@ -47,7 +50,7 @@ export async function api(path, body) {
   });
   const data = await r.json();
   if (!r.ok)
-    throw Error(data.error || data.message || "Verbindung fehlgeschlagen");
+    throw Object.assign(Error(data.error || data.message || "Verbindung fehlgeschlagen"), {status:r.status});
   return data;
 }
 export const roleName = { chef: "Chef", kitchen: "Küche", driver: "Fahrer" };
@@ -280,6 +283,7 @@ function App() {
     setToast(s);
     setTimeout(() => setToast(""), 6500);
   }, []);
+  const locationSharing = useDriverLocation({user, data, send:api, ready:!loading});
   const refresh = useCallback(async () => {
     const s = await api("session");
     setUser(s.user);
@@ -460,6 +464,10 @@ function App() {
           </div>
         </header>
         <main className="content">
+          {user.role === "driver" && data.shifts.some(s => s.employeeId === user.id && !s.end) && <div className="notice location-sharing">
+            <div><strong>{locationSharing.tracking ? "Standortfreigabe aktiv" : "Standortfreigabe"}</strong><p role="status">{locationSharing.status}</p><small>Für laufende Updates die App geöffnet lassen. Geräte können GPS im Hintergrund pausieren.</small></div>
+            <button className="secondary" onClick={locationSharing.toggle}>{locationSharing.tracking ? "Standortfreigabe stoppen" : "Standortfreigabe aktivieren"}</button>
+          </div>}
           {demo && (
             <div className="demo-strip">
               <span>
@@ -596,12 +604,7 @@ export function Tasks({ data, act }) {
   );
 }
 export function Drivers({ data }) {
-  const [selected, setSelected] = useState("");
   const drivers = data.employees.filter(e => e.role === "driver" && e.active !== false);
-  const located = drivers.filter(e => e.location && data.shifts.some(s => s.employeeId === e.id && !s.end));
-  const driver = located.find(e => e.id === selected) || located[0];
-  const location = driver?.location;
-  const bbox = location ? [Math.max(-180, location.longitude - .02), Math.max(-90, location.latitude - .012), Math.min(180, location.longitude + .02), Math.min(90, location.latitude + .012)].join(",") : "";
   return (
     <Panel
       title="Dein Team unterwegs"
@@ -639,12 +642,7 @@ export function Drivers({ data }) {
           })}
       </div>
       <div className="driver-map">
-        {driver ? <>
-          <label>Fahrerstandort <select aria-label="Fahrerstandort" value={driver.id} onChange={e => setSelected(e.target.value)}>{located.map(e => <option value={e.id} key={e.id}>{e.name}</option>)}</select></label>
-          <p className="muted">Zuletzt geteilt: {new Date(location.updatedAt).toLocaleString("de-DE", {timeZone:"Europe/Berlin"})}{Date.now() - Date.parse(location.updatedAt) > 120000 ? " · Standort möglicherweise veraltet" : ""}</p>
-          <iframe title={`Karte · ${driver.name}`} loading="lazy" referrerPolicy="no-referrer" src={`https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${location.latitude},${location.longitude}`} />
-          <a href={`https://www.openstreetmap.org/?mlat=${location.latitude}&mlon=${location.longitude}#map=15/${location.latitude}/${location.longitude}`} target="_blank" rel="noreferrer">Karte öffnen</a>
-        </> : <Empty>Keine Fahrerstandorte verfügbar. Fahrer können während ihrer Schicht die Standortfreigabe aktivieren.</Empty>}
+        <Suspense fallback={<p>Karte wird geladen …</p>}><LiveDriverMap drivers={drivers.filter(e => data.shifts.some(s => s.employeeId === e.id && !s.end))} /></Suspense>
       </div>
       <div className="panel-foot">
         Lieferzeit: von Erfassung bis Zustellung, inklusive Wartezeit. Die Karte zeigt den zuletzt freiwillig geteilten Standort.

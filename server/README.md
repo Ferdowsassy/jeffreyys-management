@@ -92,9 +92,12 @@ Employees optionally have `phone` (up to 40 characters). Orders optionally have 
 | updateShift | `id,start,end` | Chef; ISO timestamps, nullable end; rejects future times, overlap, duplicate active shifts; preserves wage snapshot |
 | clearDemo | none | Chef; removes demo orders/shifts/schedules/tasks/handoffs/audit; retains accounts and zones, removes their demo flags to preserve access/configuration |
 | reset | `confirmation:'RESET'` | Chef; replaces data with fresh demo seed and revokes all sessions; frontend must sign in again |
-| saveLocation | `latitude,longitude` | Driver/chef; updates own last location; validated ranges |
+| saveLocation | `latitude,longitude,accuracy?,capturedAt?,employeeId?` | Driver/chef; updates own last location; drivers require an active shift; validates ranges, non-negative accuracy and fix age within 30 seconds |
+| stopLocation | `employeeId?` | Driver/chef; clears own location, never another employee's |
 
 `noAddress:true` stores empty address/postalCode/city and snapshots the configured `flatFee`. Unknown postal codes receive zero fee rather than a guessed rate. Order numbers must be unique per UTC date. New records have `demo:false`; seed records have `demo:true`. Demo account and zone configuration is retained on clearDemo intentionally; reset is the explicit destructive demo rebuild.
+
+Location writes use the normal transaction and SSE invalidation path, but do not add audit entries. Clock-out and logout clear the last fix. Client GPS uploads include their employee ID to prevent a request queued by a previous login from updating a new session's employee. Live markers expire based on `capturedAt` (falling back to legacy `updatedAt`). Only the current fix is persisted, with optional accuracy in metres. Map tiles use `https://tile.openstreetmap.org`, visible attribution, browser HTTP caching and an origin-only referrer; no private APIs or app data are sent to the tile server.
 
 ## Cash and payroll
 

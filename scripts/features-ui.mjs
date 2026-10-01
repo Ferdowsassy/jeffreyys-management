@@ -16,7 +16,7 @@ const base = 'http://127.0.0.1:' + server.address().port;
 const browser = await chromium.launch({headless:true});
 const context = await browser.newContext({viewport:{width:1440,height:1000},timezoneId:'Europe/Berlin'});
 // Verify our map integration deterministically without depending on a third-party tile server.
-await context.route('https://www.openstreetmap.org/export/embed.html?**', route => route.fulfill({contentType:'text/html',body:'<p>OpenStreetMap test map</p>'}));
+await context.route('https://tile.openstreetmap.org/**', route => route.fulfill({contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6GOcAAAAASUVORK5CYII=','base64')}));
 const page = await context.newPage();
 const errors = [];
 page.on('pageerror', e => errors.push(e.message));
@@ -84,8 +84,8 @@ try {
   await driver.close();
   await page.getByRole('button',{name:'Abmelden'}).click();
   await login('Samira','2345');
-  await expect(page.locator('iframe[title="Karte · Leo"]')).toBeVisible();
-  await expect(page.locator('iframe')).toHaveAttribute('src',/marker=48.14,11.58/);
+  await expect(page.getByRole('region',{name:'Live-Fahrerkarte'})).toBeVisible();
+  await expect(page.locator('.driver-marker[data-driver-id="leo"]')).toHaveAttribute('data-latitude','48.14');
   await expect(page.getByText(/Ø .*Min. je Bestellung/)).toBeVisible();
   await nav('Mein Verdienst');
   await expect(page.locator('.personal-earnings')).toContainText('Samira');

@@ -172,6 +172,7 @@ export function action(s, user, p, { minPinLength = 4 } = {}) {
       if (s.orders.some((o) => o.employeeId === user.id && o.status === "open"))
         fail("Deliver all open orders before clocking out", 409);
       shift.end = now;
+      delete employee().location;
       result = createHandoff(s, shift, p.cashConfirmed, now);
       break;
     }
@@ -492,17 +493,30 @@ export function action(s, user, p, { minPinLength = 4 } = {}) {
       if (p.confirmation !== "RESET") fail("Type RESET to confirm");
       Object.assign(s, seed());
       break;
-    case "saveLocation":
+    case "saveLocation": {
       requireRole(user, "driver", "chef");
+      if (p.employeeId && p.employeeId !== user.id) fail("Not your location", 403);
+      if (user.role === "driver" && !s.shifts.some(shift => shift.employeeId === user.id && !shift.end)) fail("Clock in before sharing location", 409);
+      const capturedAt = p.capturedAt === undefined ? now : timestamp(p.capturedAt);
+      if (Date.parse(now) - Date.parse(capturedAt) > 30000 || Date.parse(capturedAt) - Date.parse(now) > 30000) fail("GPS position is too old or in the future");
       employee().location = {
         latitude: number(p.latitude, "latitude", -90, 90),
         longitude: number(p.longitude, "longitude", -180, 180),
         updatedAt: now,
+        capturedAt,
+        ...(p.accuracy !== undefined ? {accuracy:number(p.accuracy, "GPS accuracy", 0, 1000000)} : {}),
       };
+      break;
+    }
+    case "stopLocation":
+      requireRole(user, "driver", "chef");
+      if (p.employeeId && p.employeeId !== user.id) fail("Not your location", 403);
+      delete employee().location;
       break;
     default:
       fail("Unknown action");
   }
+  if (["saveLocation", "stopLocation"].includes(p.type)) return result;
   s.audit.push({
     id: randomUUID(),
     type: p.type,

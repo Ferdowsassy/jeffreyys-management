@@ -50,3 +50,27 @@ test('kitchen receives active driver locations and delivery timing without finan
   const ended = (await request('/api/state',undefined,kitchen)).body;
   assert.equal(ended.employees.find(e => e.id === 'leo').location,undefined);
 });
+test('location sharing validates fixes, stops on request/logout/clock-out, and does not crowd the audit log', async t => {
+  const {request,login,app} = await fixture(t);
+  const driver = await login('leo','3456'), kitchen = await login('samira','2345');
+  const act = (data,cookie = driver) => request('/api/action',data,cookie);
+  const auditLength = app.locals.store.read().audit.length;
+  assert.equal((await act({type:'saveLocation',latitude:48.14,longitude:11.58,accuracy:12,capturedAt:new Date().toISOString()})).status,200);
+  assert.equal(app.locals.store.read().audit.length,auditLength);
+  assert.equal((await request('/api/state',undefined,kitchen)).body.employees.find(e => e.id === 'leo').location.accuracy,12);
+  assert.equal((await act({type:'saveLocation',latitude:48,longitude:11,capturedAt:'2020-01-01T00:00:00Z'})).status,400);
+  assert.equal((await act({type:'saveLocation',latitude:48,longitude:11,accuracy:-1})).status,400);
+  assert.equal((await act({type:'saveLocation',employeeId:'mia',latitude:48,longitude:11})).status,403);
+  assert.equal((await act({type:'stopLocation',employeeId:'mia'})).status,403);
+  assert.equal((await act({type:'stopLocation'},kitchen)).status,403);
+  assert.equal((await act({type:'stopLocation'})).status,200);
+  assert.equal(app.locals.store.read().employees.find(e => e.id === 'leo').location,undefined);
+  await act({type:'saveLocation',latitude:48,longitude:11});
+  await request('/api/logout',{},driver);
+  assert.equal(app.locals.store.read().employees.find(e => e.id === 'leo').location,undefined);
+  const driver2 = await login('leo','3456');
+  await act({type:'saveLocation',latitude:48,longitude:11},driver2);
+  await act({type:'clockOut',cashConfirmed:true},driver2);
+  assert.equal(app.locals.store.read().employees.find(e => e.id === 'leo').location,undefined);
+  assert.equal((await act({type:'saveLocation',latitude:48,longitude:11},driver2)).status,409);
+});

@@ -4,7 +4,9 @@ A React + Express operations app for Jeffreyys: shifts, delivery orders, cash ha
 
 Chefs can filter the team by role, maintain employee phone numbers, and view earnings per shift or per employee/month under **Zeiten**. Kitchen employees have **Mein Verdienst** for their own monthly earnings. They never receive other employees' wages or customer contacts.
 
-The weekly plan supports editing, moving and removing scheduled shifts directly, role filters, overnight labels and returning to the current week. Chef and kitchen dashboards show active drivers' voluntarily shared locations on an OpenStreetMap map, with timestamps and today's average minutes from order creation to delivery (including preparation/waiting time).
+The weekly plan supports editing, moving and removing scheduled shifts directly, role filters, overnight labels and returning to the current week. Chef and kitchen dashboards show all active drivers' voluntarily shared locations together on a Leaflet/OpenStreetMap map. Markers move through the existing live SSE updates without reloading the map. Positions older than 30 seconds are labelled paused; after two minutes they disappear. Today's average minutes from order creation to delivery includes preparation/waiting time.
+
+Drivers enable location sharing during an active shift and grant browser/device location permission. Tracking stays mounted across app pages and resumes after a reload in the same tab while its session remains active. GPS watches publish at most once per five seconds and request a fresh fix every ten seconds even when stationary. The app reports denied permission, missing HTTPS, GPS timeouts and upload failures. Sharing stops on explicit stop, clock-out or logout. Only the most recent fix is stored; frequent GPS writes do not enter the business audit log. Browser/OS background suspension still applies: keep the app open for continuous updates; locked-screen or external navigation tracking is not guaranteed by a browser PWA.
 
 Analysis compares 7, 30, 90 or 365 days with the previous equally sized period. Optional order items are entered manually with name, quantity and unit price; chefs can add/correct items for historical orders under **Analyse**. Article totals count delivered orders with recorded items only, show price ranges when prices vary, and disclose coverage. Existing orders have no article breakdown until it is entered; OCR still extracts the original receipt fields.
 
@@ -51,6 +53,8 @@ An offline launch shows a reconnect screen. Shifts, orders, sessions, customer i
 - `npm run build` — production client build
 - `npm run test:ui` — Playwright browser regressions
 - `npm run verify` — complete local verification
+
+`node scripts/location-ui.mjs` exercises browser GPS sharing with simulated positions in simultaneous driver, chef and kitchen sessions. `LOCATION_BROWSER=webkit node scripts/location-ui.mjs` runs the movement/navigation/reload checks in an iPhone-sized WebKit browser (requires the Playwright WebKit browser). These checks do not replace an actual iPhone GPS/background-permission test.
 
 ## Security defaults
 

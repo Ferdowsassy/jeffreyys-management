@@ -944,7 +944,13 @@ input::placeholder {
 .personal-earnings div { display: flex; flex-direction: column; gap: 10px; }
 .personal-earnings span { color: var(--muted); font-size: 11px; }
 .personal-earnings strong { font-size: 25px; }
-.driver-map iframe { width: 100%; height: 340px; border: 1px solid var(--line); border-radius: 8px; margin: 12px 0; }
+.live-driver-map { height: 360px; border: 1px solid var(--line); border-radius: 8px; margin: 12px 0; z-index: 0; }
+.driver-marker { background: var(--orange); color: white; border: 2px solid white; border-radius: 20px; box-shadow: 0 2px 6px #0004; text-align: center; font: 600 12px/28px sans-serif; }
+.driver-marker.stale { background: #877552; }
+.location-sharing { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.location-sharing p { margin: 6px 0; }
+.location-status-list { display: flex; flex-wrap: wrap; gap: 16px; }
+.location-status-list > div { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
 .order-items { grid-column: 1 / -1; border: 1px solid var(--line); border-radius: 8px; padding: 16px; min-width: 0; }
 .item-row { display: grid; grid-template-columns: minmax(140px, 2fr) minmax(70px, 1fr) minmax(90px, 1fr) auto; gap: 12px; margin-bottom: 12px; align-items: end; }
 .item-row label { min-width: 0; }

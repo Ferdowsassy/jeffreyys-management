@@ -67,8 +67,9 @@ export async function createApp({
     res.set("Cache-Control", "no-store");
     res.set("X-Content-Type-Options", "nosniff");
     res.set("Referrer-Policy", "no-referrer");
+    res.set("Permissions-Policy", "geolocation=(self)");
     res.set("X-Frame-Options", "DENY");
-    res.set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-src https://www.openstreetmap.org; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
+    res.set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://tile.openstreetmap.org; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
     if (production) res.set("Strict-Transport-Security", "max-age=31536000");
     if (stopping) return res.status(503).json({error:"Server shutting down"});
     if (req.method === "POST" && req.headers.origin) {
@@ -170,10 +171,19 @@ export async function createApp({
     });
     res.json({ user: sessionUser(employee) });
   });
-  app.post("/api/logout", (req, res) => {
+  app.post("/api/logout", async (req, res, next) => {
     closeSession(req.token);
     res.clearCookie("jeffreyys_session", { path: "/" });
-    res.json({ ok: true });
+    try {
+      if (req.user) {
+        await store.transact(state => {
+          const employee = state.employees.find(e => e.id === req.user.id);
+          if (employee) delete employee.location;
+        });
+        invalidate();
+      }
+      res.json({ ok: true });
+    } catch (error) {next(error);}
   });
   app.use("/api", (req, res, next) =>
     req.user ? next() : res.status(401).json({ error: "Sign in required" }),
