@@ -71,7 +71,7 @@ export function Panel({ title, subtitle, action, children, className = "" }) {
     </section>
   );
 }
-export function Form({ fields, onSubmit, submit = "Speichern", initial = {} }) {
+export function Form({ fields, onSubmit, submit = "Speichern", initial = {}, children }) {
   const [busy, setBusy] = useState(false);
   return (
     <form
@@ -94,6 +94,7 @@ export function Form({ fields, onSubmit, submit = "Speichern", initial = {} }) {
           {f.options ? (
             <select
               name={f.name}
+              aria-label={f.label}
               defaultValue={initial[f.name] ?? f.value ?? ""}
             >
               {f.options.map((o) => (
@@ -120,6 +121,7 @@ export function Form({ fields, onSubmit, submit = "Speichern", initial = {} }) {
           )}
         </label>
       ))}
+      {children}
       <button className="primary" disabled={busy}>
         {busy ? "Wird gespeichert …" : submit}
       </button>
@@ -359,6 +361,7 @@ function App() {
         ? [
             ["Tafel", LayoutDashboard],
             ["Plan", CalendarDays],
+            ["Mein Verdienst", Wallet],
             ["Aufgaben", ClipboardList],
           ]
         : [
@@ -486,7 +489,7 @@ function App() {
           ) : current === "Plan" ? (
             <Schedule user={user} data={data} act={act} />
           ) : current === "Analyse" ? (
-            <Analytics data={data} notify={notify} />
+            <Analytics data={data} notify={notify} act={act} />
           ) : current === "Aufgaben" ? (
             <>
               <Title
@@ -495,6 +498,8 @@ function App() {
               />
               <Tasks data={data} act={act} />
             </>
+          ) : current === "Mein Verdienst" ? (
+            <Driver user={user} data={data} page="Verdienst" act={act} notify={notify} />
           ) : user.role === "driver" ? (
             <Driver
               user={user}
@@ -505,6 +510,7 @@ function App() {
             />
           ) : (
             <Management
+              key={current}
               user={user}
               data={data}
               page={current}
@@ -590,6 +596,12 @@ export function Tasks({ data, act }) {
   );
 }
 export function Drivers({ data }) {
+  const [selected, setSelected] = useState("");
+  const drivers = data.employees.filter(e => e.role === "driver" && e.active !== false);
+  const located = drivers.filter(e => e.location && data.shifts.some(s => s.employeeId === e.id && !s.end));
+  const driver = located.find(e => e.id === selected) || located[0];
+  const location = driver?.location;
+  const bbox = location ? [Math.max(-180, location.longitude - .02), Math.max(-90, location.latitude - .012), Math.min(180, location.longitude + .02), Math.min(90, location.latitude + .012)].join(",") : "";
   return (
     <Panel
       title="Dein Team unterwegs"
@@ -597,8 +609,7 @@ export function Drivers({ data }) {
       action={<Badge tone="green">LIVE</Badge>}
     >
       <div className="driver-list">
-        {data.employees
-          .filter((e) => e.role === "driver")
+        {drivers
           .map((e) => {
             const active = data.shifts.find(
                 (s) => s.employeeId === e.id && !s.end,
@@ -606,6 +617,8 @@ export function Drivers({ data }) {
               orders = data.orders.filter(
                 (o) => o.employeeId === e.id && o.status === "open",
               );
+            const delivered = data.orders.filter(o => o.employeeId === e.id && o.deliveredAt && day(o.createdAt) === day(Date.now()));
+            const minutes = delivered.length ? sum(delivered, o => Math.max(0, (Date.parse(o.deliveredAt) - Date.parse(o.createdAt)) / 60000)) / delivered.length : null;
             return (
               <div className="driver-row" key={e.id}>
                 <span className="avatar">{e.name.slice(0, 2)}</span>
@@ -616,6 +629,7 @@ export function Drivers({ data }) {
                       ? orders.length + " offene Lieferungen"
                       : "Nächste Pause? Verdient."}
                   </small>
+                  <small>{minutes === null ? "Noch keine Lieferzeit heute" : `Ø ${minutes.toFixed(1)} Min. je Bestellung · ${delivered.length} zugestellt heute`}</small>
                 </div>
                 <Badge tone={active ? "green" : ""}>
                   {active ? "Im Dienst" : "Nicht im Dienst"}
@@ -624,8 +638,16 @@ export function Drivers({ data }) {
             );
           })}
       </div>
+      <div className="driver-map">
+        {driver ? <>
+          <label>Fahrerstandort <select aria-label="Fahrerstandort" value={driver.id} onChange={e => setSelected(e.target.value)}>{located.map(e => <option value={e.id} key={e.id}>{e.name}</option>)}</select></label>
+          <p className="muted">Zuletzt geteilt: {new Date(location.updatedAt).toLocaleString("de-DE", {timeZone:"Europe/Berlin"})}{Date.now() - Date.parse(location.updatedAt) > 120000 ? " · Standort möglicherweise veraltet" : ""}</p>
+          <iframe title={`Karte · ${driver.name}`} loading="lazy" referrerPolicy="no-referrer" src={`https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${location.latitude},${location.longitude}`} />
+          <a href={`https://www.openstreetmap.org/?mlat=${location.latitude}&mlon=${location.longitude}#map=15/${location.latitude}/${location.longitude}`} target="_blank" rel="noreferrer">Karte öffnen</a>
+        </> : <Empty>Keine Fahrerstandorte verfügbar. Fahrer können während ihrer Schicht die Standortfreigabe aktivieren.</Empty>}
+      </div>
       <div className="panel-foot">
-        Rückkehrprognosen erscheinen erst bei ausreichenden Lieferzeitdaten.
+        Lieferzeit: von Erfassung bis Zustellung, inklusive Wartezeit. Die Karte zeigt den zuletzt freiwillig geteilten Standort.
       </div>
     </Panel>
   );

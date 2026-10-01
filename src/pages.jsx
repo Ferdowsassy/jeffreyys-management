@@ -14,6 +14,7 @@ import {
 import { api, Title, Panel, Form, Empty, Badge, roleName } from "./main";
 import { euro, day, sum, hours, payroll } from "./finance";
 import { scanReceipt } from "./receipt-ocr";
+import { summarizeItems } from "./order-items";
 const today = () => day(Date.now());
 const person = (data, id) =>
   data.employees.find((e) => e.id === id)?.name || "Unbekannt";
@@ -66,17 +67,33 @@ function Table({ headers, rows }) {
     </div>
   );
 }
+function ItemsEditor({ items, onChange }) {
+  const update = (index, key, value) => onChange(items.map((item,i) => i === index ? {...item,[key]:value} : item));
+  return <fieldset className="order-items"><legend>Artikel · optional</legend>
+    <p className="muted">Stückpreis nach Rabatt. Artikelbeträge können wegen Lieferkosten vom Gesamtbetrag abweichen.</p>
+    {items.map((item,index) => <div className="item-row" key={index}>
+      <label>Artikel <input aria-label={`Artikel ${index + 1}`} value={item.name} required maxLength={120} onChange={e => update(index,"name",e.target.value)} /></label>
+      <label>Menge <input aria-label={`Menge ${index + 1}`} type="number" min="1" max="1000" step="1" required value={item.quantity} onChange={e => update(index,"quantity",e.target.value)} /></label>
+      <label>Stückpreis (€) <input aria-label={`Stückpreis ${index + 1}`} type="number" min="0" max="100000" step="0.01" required value={item.unitPrice} onChange={e => update(index,"unitPrice",e.target.value)} /></label>
+      <button type="button" className="text-button" aria-label={`Artikel ${index + 1} entfernen`} onClick={() => onChange(items.filter((_,i) => i !== index))}>Entfernen</button>
+    </div>)}
+    <button type="button" className="secondary" disabled={items.length >= 100} onClick={() => onChange([...items,{name:"",quantity:1,unitPrice:""}])}>+ Artikel</button>
+  </fieldset>;
+}
+const numericItems = items => items.map(item => ({...item,quantity:Number(item.quantity),unitPrice:Number(item.unitPrice)}));
 export function Schedule({ user, data, act }) {
   const [offset, setOffset] = useState(0),
-    [show, setShow] = useState(false);
-  let monday = new Date();
-  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7) + offset * 7);
+    [show, setShow] = useState(false),
+    [editing, setEditing] = useState(null),
+    [role, setRole] = useState("all");
+  let monday = new Date(today() + "T12:00:00Z");
+  monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7) + offset * 7);
   const days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(monday);
-    d.setDate(d.getDate() + i);
+    d.setUTCDate(d.getUTCDate() + i);
     return day(d);
   });
-  const scheduled = data.schedule.filter((s) => days.includes(s.date));
+  const scheduled = data.schedule.filter(s => days.includes(s.date) && (role === "all" || data.employees.find(e => e.id === s.employeeId)?.role === role)).sort((a,b) => a.start.localeCompare(b.start));
   const cost = sum(scheduled, (s) => {
     const e = data.employees.find((e) => e.id === s.employeeId);
     let diff =
@@ -92,7 +109,7 @@ export function Schedule({ user, data, act }) {
         subtitle="Der Wochenplan für einen reibungslosen Betrieb."
       >
         {user.role === "chef" && (
-          <button className="primary" onClick={() => setShow(!show)}>
+          <button className="primary" onClick={() => {setEditing(null);setShow(!show);}}>
             <Plus size={18} />
             Schicht eintragen
           </button>
@@ -118,6 +135,8 @@ export function Schedule({ user, data, act }) {
             <ChevronRight size={18} />
           </button>
         </div>
+        <button className="secondary" onClick={() => setOffset(0)}>Diese Woche</button>
+        {user.role !== "driver" && <label>Rolle <select aria-label="Planrolle" value={role} onChange={e => setRole(e.target.value)}><option value="all">Alle Rollen</option>{Object.entries(roleName).map(([value,label]) => <option value={value} key={value}>{label}</option>)}</select></label>}
         {user.role === "chef" && (
           <button
             className="secondary"
@@ -130,8 +149,10 @@ export function Schedule({ user, data, act }) {
         )}
       </div>
       {show && (
-        <Panel title="Schicht hinzufügen">
+        <Panel title={editing?.id ? "Geplante Schicht bearbeiten" : "Schicht hinzufügen"} action={<button className="text-button" onClick={() => {setShow(false);setEditing(null);}}>Abbrechen</button>}>
           <Form
+            key={editing ? `${editing.employeeId}-${editing.date}` : "new"}
+            initial={editing || {}}
             fields={[
               {
                 name: "employeeId",
@@ -145,10 +166,11 @@ export function Schedule({ user, data, act }) {
               { name: "end", label: "Ende", type: "time", value: "22:00" },
             ]}
             onSubmit={async (v) => {
-              await act("saveSchedule", v);
+              await act("saveSchedule", {...v, ...(editing?.id ? {id:editing.id} : {})});
               setShow(false);
+              setEditing(null);
             }}
-          />
+          >{editing?.id && <button type="button" className="text-button" onClick={async () => {try {await act("deleteSchedule", {id:editing.id});setShow(false);setEditing(null);} catch {}}}>Schicht entfernen</button>}</Form>
         </Panel>
       )}
       <Panel
@@ -156,7 +178,7 @@ export function Schedule({ user, data, act }) {
         subtitle={
           user.role === "chef"
             ? `Geplante Lohnkosten: ${euro(cost)} · Schätzung zum aktuellen Lohn`
-            : "Deine geplanten Schichten"
+            : user.role === "kitchen" ? "Der gemeinsame Teamplan" : "Deine geplanten Schichten"
         }
       >
         <div className="week-grid">
@@ -177,13 +199,16 @@ export function Schedule({ user, data, act }) {
                   <div className="schedule-shift" key={s.id}>
                     <strong>{person(data, s.employeeId)}</strong>
                     <span>
-                      {s.start}–{s.end}
+                      {s.start}–{s.end}{s.end < s.start ? " (+1 Tag)" : ""}
                     </span>
+                    <span>{roleName[data.employees.find(e => e.id === s.employeeId)?.role]}</span>
+                    {user.role === "chef" && <button className="text-button" onClick={() => {setEditing(s);setShow(true);}}>Bearbeiten</button>}
                   </div>
                 ))}
               {!scheduled.some((s) => s.date === d) && (
                 <span className="muted">Keine Schicht</span>
               )}
+              {user.role === "chef" && <button className="text-button" onClick={() => {setEditing({date:d,start:"17:00",end:"22:00"});setShow(true);}}>+ Schicht</button>}
             </div>
           ))}
         </div>
@@ -191,7 +216,7 @@ export function Schedule({ user, data, act }) {
     </>
   );
 }
-function Payroll({ data }) {
+function Payroll({ data, personal = false }) {
   const [month, setMonth] = useState(today().slice(0, 7)),
     [detail, setDetail] = useState(null);
   const rows = data.employees.map((e) => ({ e, ...payroll(e, data, month) }));
@@ -222,9 +247,12 @@ function Payroll({ data }) {
                 [
                   [
                     "Name",
+                    "Rolle",
+                    "Telefon",
                     "Stunden",
                     "Lohn",
                     "Liefergeld",
+                    "Verdienst",
                     "Bar kassiert",
                     "Zurückgegeben",
                     "Einbehalten",
@@ -232,9 +260,12 @@ function Payroll({ data }) {
                   ],
                   ...rows.map((r) => [
                     r.e.name,
+                    roleName[r.e.role],
+                    r.e.phone || "",
                     r.hours.toFixed(2),
                     r.wages,
                     r.fees,
+                    r.wages + r.fees,
                     r.cash,
                     r.returned,
                     r.retained,
@@ -252,15 +283,28 @@ function Payroll({ data }) {
         </button>
       </div>
       <Panel
-        title="Monatsabrechnung"
+        title={personal ? "Dein Monatsverdienst" : "Monatsabrechnung"}
         subtitle="Lohn + Liefergeld − einbehaltenes Bargeld. Bereits abgegebenes Bargeld wird nicht doppelt abgezogen."
       >
-        <Table
+        {personal ? <div className="personal-earnings">
+          {rows.map(r => <React.Fragment key={r.e.id}>
+            <p className="earnings-owner">{r.e.name} · {roleName[r.e.role]}</p>
+            <div><span>Verdienst vor Bargeldabzug</span><strong>{euro(r.wages + r.fees)}</strong></div>
+            <div><span>Arbeitsstunden</span><strong>{r.hours.toFixed(2)}</strong></div>
+            <div><span>Stundenlohn gesamt</span><strong>{euro(r.wages)}</strong></div>
+            <div><span>Auszahlung</span><strong>{euro(r.payout)}</strong></div>
+            {r.fees !== 0 && <div><span>Liefergeld</span><strong>{euro(r.fees)}</strong></div>}
+            {r.retained !== 0 && <div><span>Einbehaltenes Bargeld</span><strong>{euro(r.retained)}</strong></div>}
+          </React.Fragment>)}
+        </div> : <Table
           headers={[
             "Mitarbeiter",
+            "Rolle",
+            "Telefon",
             "Stunden",
             "Lohn",
             "Liefergeld",
+            "Verdienst",
             "Einbehalten",
             "Auszahlung",
           ]}
@@ -271,13 +315,16 @@ function Payroll({ data }) {
             >
               {r.e.name}
             </button>,
+            roleName[r.e.role],
+            r.e.phone || "—",
             r.hours.toFixed(2),
             euro(r.wages),
             euro(r.fees),
+            euro(r.wages + r.fees),
             euro(r.retained),
             <strong>{euro(r.payout)}</strong>,
           ])}
-        />
+        />}
       </Panel>
       {detail && (
         <Panel title={"Barbestellungen · " + person(data, detail)}>
@@ -326,6 +373,8 @@ function OrderTable({ orders, data }) {
 export function Management({ user, data, page, act, notify }) {
   const [editing, setEditing] = useState(null),
     [show, setShow] = useState(false),
+    [teamRole, setTeamRole] = useState("all"),
+    [timeView, setTimeView] = useState("day"),
     [date, setDate] = useState(today());
   useEffect(() => {
     setEditing(null);
@@ -375,7 +424,10 @@ export function Management({ user, data, page, act, notify }) {
     body = (
       <>
         <div className="toolbar">
-          <span>{data.employees.length} Mitarbeiter</span>
+          <label>Rolle <select aria-label="Teamrolle" value={teamRole} onChange={e => setTeamRole(e.target.value)}>
+            <option value="all">Alle Mitarbeiter ({data.employees.length})</option>
+            {Object.entries(roleName).map(([role, label]) => <option key={role} value={role}>{label} ({data.employees.filter(e => e.role === role).length})</option>)}
+          </select></label>
           <button className="primary" onClick={openNew}>
             <Plus size={17} />
             Mitarbeiter anlegen
@@ -390,6 +442,7 @@ export function Management({ user, data, page, act, notify }) {
               initial={editing || {}}
               fields={[
                 { name: "name", label: "Name" },
+                { name: "phone", label: "Telefon", type: "tel", required: false, maxLength: 40 },
                 {
                   name: "role",
                   label: "Rolle",
@@ -432,10 +485,11 @@ export function Management({ user, data, page, act, notify }) {
         )}
         <Panel title="Teamübersicht">
           <Table
-            headers={["Name", "Rolle", "Stundenlohn", "Status", "Aktion"]}
-            rows={data.employees.map((e) => [
+            headers={["Name", "Rolle", "Telefon", "Stundenlohn", "Status", "Aktion"]}
+            rows={data.employees.filter(e => teamRole === "all" || e.role === teamRole).map((e) => [
               <strong>{e.name}</strong>,
               roleName[e.role],
+              e.phone || "—",
               euro(e.hourlyRate),
               <Badge tone={e.active !== false ? "green" : ""}>
                 {e.active !== false ? "Aktiv" : "Pausiert"}
@@ -707,13 +761,19 @@ export function Management({ user, data, page, act, notify }) {
     body = (
       <>
         <div className="toolbar">
+          <div className="segmented">
+            <button className={timeView === "day" ? "selected" : ""} onClick={() => setTimeView("day")}>Schichten</button>
+            <button className={timeView === "month" ? "selected" : ""} onClick={() => setTimeView("month")}>Mitarbeiter · Monat</button>
+          </div>
+          {timeView === "day" &&
           <input
             aria-label="Schichtdatum"
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-          />
+          />}
         </div>
+        {timeView === "month" ? <Payroll data={data} /> : <>
         <Panel title="Erfasste Arbeitszeit">
           <Table
             headers={[
@@ -721,6 +781,7 @@ export function Management({ user, data, page, act, notify }) {
               "Beginn",
               "Ende",
               "Stunden",
+              "Verdienst",
               "Hinweis",
               "",
             ]}
@@ -729,6 +790,7 @@ export function Management({ user, data, page, act, notify }) {
               time(s.start),
               time(s.end),
               hours(s).toFixed(2),
+              euro(Math.round(hours(s) * Math.round(s.hourlyRate * 100)) / 100 + sum(data.orders.filter(o => o.shiftId === s.id && o.status === "delivered"), o => o.deliveryFee)),
               <Badge
                 tone={
                   !s.end &&
@@ -751,6 +813,7 @@ export function Management({ user, data, page, act, notify }) {
             ])}
           />
         </Panel>
+        <div className="notice">Verdienst = Stundenlohn + Liefergeld zugestellter Bestellungen, vor Bargeldabzug. Offene Schichten sind vorläufig.</div>
         {editing && (
           <Panel title="Zeitkorrektur · wird protokolliert">
             <Form
@@ -794,6 +857,7 @@ export function Management({ user, data, page, act, notify }) {
               ])}
           />
         </Panel>
+        </>}
       </>
     );
   }
@@ -875,6 +939,7 @@ function localTime(d) {
 export function Driver({ user, data, page, act, notify }) {
   const [form, setForm] = useState(false),
     [receipt, setReceipt] = useState({}),
+    [items, setItems] = useState([]),
     [scan, setScan] = useState(null),
     [scanBusy, setScanBusy] = useState(false),
     [scanStatus, setScanStatus] = useState(''),
@@ -952,6 +1017,7 @@ export function Driver({ user, data, page, act, notify }) {
     try {
       const r = await scanReceipt(file, setScanStatus);
       setReceipt(r.draft || {});
+      setItems([]);
       setScan(r);
       setScanPhoto(URL.createObjectURL(file));
       setForm(true);
@@ -980,6 +1046,7 @@ export function Driver({ user, data, page, act, notify }) {
           }
         />
       )}{" "}
+      {user.role === "kitchen" && page === "Verdienst" && <Title title="Mein Verdienst" subtitle="Deine Arbeitszeit und dein Verdienst nach Monat." />}
       {page === "Schicht" && (
         <>
           <Panel
@@ -1118,13 +1185,15 @@ export function Driver({ user, data, page, act, notify }) {
                 ...v,
                 amount: Number(v.amount),
                 noAddress: v.noAddress === "true",
+                items: numericItems(items),
               });
               setForm(false);
               setReceipt({});
+              setItems([]);
               setScan(null);
               setScanPhoto('');
             }}
-          />
+          ><ItemsEditor items={items} onChange={setItems} /></Form>
         </Panel>
       )}
       {page === "Belege" && (
@@ -1194,23 +1263,28 @@ export function Driver({ user, data, page, act, notify }) {
       )}
       {page === "Verdienst" && (
         <Payroll
+          personal={user.role === "kitchen"}
           data={{
             ...data,
             employees: data.employees.filter((e) => e.id === user.id),
+            shifts: data.shifts.filter(s => s.employeeId === user.id),
+            orders: data.orders.filter(o => o.employeeId === user.id),
+            handoffs: data.handoffs.filter(h => h.employeeId === user.id),
           }}
         />
       )}
     </>
   );
 }
-export function Analytics({ data, notify }) {
+export function Analytics({ data, notify, act }) {
   const [period, setPeriod] = useState("week"),
     [offset, setOffset] = useState(0),
     [coach, setCoach] = useState(null),
     [busy, setBusy] = useState(false);
+  const [itemOrder, setItemOrder] = useState(""), [items, setItems] = useState([]);
   const end = new Date();
   end.setHours(23, 59, 59, 999);
-  const length = period === "week" ? 7 : 30;
+  const length = {week: 7, month: 30, quarter: 90, year: 365}[period];
   end.setDate(end.getDate() + offset * length);
   const start = new Date(end);
   start.setDate(start.getDate() - length + 1);
@@ -1247,6 +1321,7 @@ export function Analytics({ data, notify }) {
   const a = calc(start, end),
     b = calc(prevStart, prevEnd),
     areas = {};
+  const articles = summarizeItems(a.os);
   a.os.forEach((o) => {
     const key = o.postalCode || "Ohne Adresse";
     areas[key] = (areas[key] || 0) + o.amount;
@@ -1262,6 +1337,8 @@ export function Analytics({ data, notify }) {
           {[
             ["week", "7 Tage"],
             ["month", "30 Tage"],
+            ["quarter", "90 Tage"],
+            ["year", "365 Tage"],
           ].map(([v, l]) => (
             <button
               key={v}
@@ -1312,6 +1389,15 @@ export function Analytics({ data, notify }) {
             fmt(a[key] - b[key]),
           ])}
         />
+      </Panel>
+      <Panel title="Verkaufte Artikel" subtitle={`${a.os.filter(o => o.status === "delivered" && o.items?.length).length} von ${a.os.filter(o => o.status === "delivered").length} zugestellten Bestellungen mit Artikeln · Nur erfasste Artikel im gewählten Zeitraum`}>
+        <Table headers={["Artikel", "Anzahl", "Stückpreis", "Artikelumsatz"]} rows={articles.map(item => [item.name,item.quantity,item.minPrice === item.maxPrice ? euro(item.minPrice) : `${euro(item.minPrice)}–${euro(item.maxPrice)}`,euro(item.revenue)])} />
+        <details className="article-capture"><summary>Artikel einer Bestellung erfassen oder korrigieren</summary>
+          <form onSubmit={async e => {e.preventDefault();try {await act("saveOrderItems", {id:itemOrder,items:numericItems(items)});setItemOrder("");setItems([]);} catch {}}}>
+            <label>Bestellung <select aria-label="Bestellung" required value={itemOrder} onChange={e => {setItemOrder(e.target.value);setItems(data.orders.find(o => o.id === e.target.value)?.items || []);}}><option value="">Bestellung wählen</option>{[...data.orders].sort((a,b) => b.createdAt.localeCompare(a.createdAt)).map(o => <option value={o.id} key={o.id}>{day(o.createdAt)} · {o.orderNumber} · {person(data,o.employeeId)}</option>)}</select></label>
+            {itemOrder && <><ItemsEditor items={items} onChange={setItems} /><button className="primary">Artikel speichern</button></>}
+          </form>
+        </details>
       </Panel>
       <div className="two-column">
         <Panel title="Stärkste Liefergebiete">

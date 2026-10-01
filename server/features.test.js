@@ -1,0 +1,52 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {fixture} from './test-helper.js';
+test('employee contact, item validation and schedule editing preserve permissions and historical money', async t => {
+  const {request,login,app} = await fixture(t);
+  const chef = await login('alex','1234'), driver = await login('leo','3456'), kitchen = await login('samira','2345');
+  const act = (data,cookie = chef) => request('/api/action',data,cookie);
+  let res = await act({type:'saveEmployee',id:'samira',name:'Samira',role:'kitchen',hourlyRate:16,phone:'+49 123 456789'});
+  assert.equal(res.status,200);
+  assert.equal(res.body.state.employees.find(e => e.id === 'samira').phone,'+49 123 456789');
+  assert.equal((await act({type:'saveEmployee',id:'samira',name:'Samira',role:'kitchen',hourlyRate:16,phone:'x'.repeat(41)})).status,400);
+  await act({type:'clockOut',cashConfirmed:true},kitchen);
+  const own = (await request('/api/state',undefined,kitchen)).body;
+  assert.equal(own.employees.find(e => e.id === 'samira').phone,'+49 123 456789');
+  assert.deepEqual(own.payroll, (await request('/api/state',undefined,chef)).body.payroll.filter(p => p.employeeId === 'samira'));
+  const before = app.locals.store.read().orders.find(o => o.id === 'demo-order-1');
+  const items = [{name:'Burger',quantity:2,unitPrice:10.25}];
+  assert.equal((await act({type:'saveOrderItems',id:before.id,items},driver)).status,200);
+  assert.equal((await act({type:'saveOrderItems',id:'demo-order-2',items},driver)).status,403);
+  assert.equal((await act({type:'saveOrderItems',id:before.id,items},kitchen)).status,403);
+  for (const bad of [[{name:'Burger',quantity:1.5,unitPrice:1}], [{name:'Burger',quantity:1,unitPrice:-1}],null]) {
+    assert.equal((await act({type:'saveOrderItems',id:before.id,items:bad})).status,400);
+  }
+  const after = app.locals.store.read().orders.find(o => o.id === before.id);
+  assert.deepEqual(after.items,items);
+  assert.equal(after.amount,before.amount);
+  assert.equal(after.deliveryFee,before.deliveryFee);
+  assert.doesNotMatch(JSON.stringify((await request('/api/state',undefined,kitchen)).body), /Burger|unitPrice/);
+  res = await act({type:'saveSchedule',employeeId:'samira',date:'2026-10-05',start:'22:00',end:'02:00'});
+  const scheduleId = res.body.result.id;
+  assert.equal((await act({type:'saveSchedule',id:scheduleId,employeeId:'samira',date:'2026-10-06',start:'21:00',end:'02:00'})).status,200);
+  assert.equal(app.locals.store.read().schedule.some(s => s.employeeId === 'samira' && s.date === '2026-10-05'),false);
+  const conflict = await act({type:'saveSchedule',employeeId:'samira',date:'2026-10-07',start:'17:00',end:'22:00'});
+  assert.equal(conflict.status,200);
+  assert.equal((await act({type:'saveSchedule',id:scheduleId,employeeId:'samira',date:'2026-10-07',start:'21:00',end:'02:00'})).status,409);
+  assert.equal(app.locals.store.read().schedule.find(s => s.id === scheduleId).date,'2026-10-06');
+  assert.equal((await act({type:'deleteSchedule',id:scheduleId},kitchen)).status,403);
+  assert.equal((await act({type:'deleteSchedule',id:scheduleId})).status,200);
+  assert.equal(app.locals.store.read().schedule.some(s => s.id === scheduleId),false);
+});
+test('kitchen receives active driver locations and delivery timing without financial or contact records', async t => {
+  const {request,login} = await fixture(t);
+  const driver = await login('leo','3456'), kitchen = await login('samira','2345');
+  await request('/api/action',{type:'saveLocation',latitude:48.14,longitude:11.58},driver);
+  const state = (await request('/api/state',undefined,kitchen)).body;
+  assert.equal(state.employees.find(e => e.id === 'leo').location.latitude,48.14);
+  assert.equal(state.orders.find(o => o.id === 'demo-order-1').employeeId,'leo');
+  assert.doesNotMatch(JSON.stringify(state.orders), /amount|payment|deliveryFee|items|address/);
+  await request('/api/action',{type:'clockOut',cashConfirmed:true},driver);
+  const ended = (await request('/api/state',undefined,kitchen)).body;
+  assert.equal(ended.employees.find(e => e.id === 'leo').location,undefined);
+});

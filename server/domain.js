@@ -25,6 +25,15 @@ const number = (value, label, min = 0, max = 100000) => {
   return value;
 };
 const money = (value, label) => euros(cents(number(value, label)));
+const orderItems = (items = []) => {
+  if (!Array.isArray(items) || items.length > 100) fail("Invalid order items");
+  return items.map(item => {
+    if (!item || typeof item !== "object") fail("Invalid order item");
+    const quantity = number(item.quantity, "item quantity", 1, 1000);
+    if (!Number.isInteger(quantity)) fail("Item quantity must be an integer");
+    return {name: text(item.name, "item name", 120), quantity, unitPrice: money(item.unitPrice, "item price")};
+  });
+};
 const day = (value) => {
   if (
     typeof value !== "string" ||
@@ -86,34 +95,39 @@ export function filterState(state, user) {
       s[key] = s[key].filter((x) => x.employeeId === user.id);
     s.tasks = [];
   } else {
-    s.employees = s.employees.map(({ id, name, role, active, demo }) => ({
+    s.employees = s.employees.map(({ id, name, role, active, demo, hourlyRate, wageHistory, location, phone }) => ({
       id,
       name,
       role,
       active,
       demo,
+      ...(id === user.id ? { hourlyRate, wageHistory, phone } : {}),
+      ...(role === "driver" && active && s.shifts.some(shift => shift.employeeId === id && !shift.end) ? {location} : {}),
     }));
-    s.shifts = s.shifts.map(({ id, employeeId, start, end, demo }) => ({
+    s.shifts = s.shifts.map(({ id, employeeId, start, end, demo, hourlyRate }) => ({
       id,
       employeeId,
       start,
       end,
       demo,
+      ...(employeeId === user.id ? {hourlyRate} : {}),
     }));
     s.orders = s.orders.map(
-      ({ id, orderNumber, status, createdAt, deliveredAt, demo }) => ({
+      ({ id, employeeId, orderNumber, status, createdAt, deliveredAt, demo, shiftId, amount, payment, deliveryFee }) => ({
         id,
+        employeeId,
         orderNumber,
         status,
         createdAt,
         deliveredAt,
         demo,
+        ...(employeeId === user.id ? {shiftId, amount, payment, deliveryFee} : {}),
       }),
     );
     s.tasks = s.tasks.filter((t) => !privateTask(t));
-    s.handoffs = [];
+    s.handoffs = s.handoffs.filter(h => h.employeeId === user.id);
     s.zones = [];
-    s.payroll = [];
+    s.payroll = s.payroll.filter(p => p.employeeId === user.id);
   }
   return s;
 }
@@ -202,10 +216,17 @@ export function action(s, user, p, { minPinLength = 4 } = {}) {
         deliveryFee: noAddress ? (s.settings.flatFee ?? 0) : zone
           ? rate(zone.feeHistory || [], today(), "fee", zone.fee)
           : 0,
+        items: orderItems(p.items),
         noAddress,
         demo: false,
       };
       s.orders.push(result);
+      break;
+    }
+    case "saveOrderItems": {
+      requireRole(user, "driver", "chef");
+      result = owned(lookup(s.orders, p.id), user);
+      result.items = orderItems(p.items);
       break;
     }
     case "delivered": {
@@ -243,6 +264,8 @@ export function action(s, user, p, { minPinLength = 4 } = {}) {
       const hourlyRate = money(p.hourlyRate, "hourly rate"),
         effectiveDate = day(p.effectiveDate || today());
       let existing = p.id ? lookup(s.employees, p.id) : null;
+      const phone = p.phone === undefined ? existing?.phone || "" : p.phone === "" ? "" : text(p.phone, "phone", 40);
+      if (phone && !/^[+\d\s()./-]+$/.test(phone)) fail("Invalid phone");
       if (
         existing?.role === "chef" &&
         p.role !== "chef" &&
@@ -267,6 +290,7 @@ export function action(s, user, p, { minPinLength = 4 } = {}) {
         ...existing,
         id: existing?.id || id,
         name,
+        phone,
         role: p.role,
         hourlyRate: rate(
           wageHistory,
@@ -332,9 +356,11 @@ export function action(s, user, p, { minPinLength = 4 } = {}) {
         start = time(p.start),
         end = time(p.end);
       if (start === end) fail("Shift cannot have zero duration");
-      const existing = s.schedule.find(
+      const atDate = s.schedule.find(
         (x) => x.employeeId === e.id && x.date === date,
       );
+      const existing = p.id ? lookup(s.schedule, p.id) : atDate;
+      if (p.id && atDate && atDate.id !== existing.id) fail("Employee already scheduled on this date", 409);
       result = {
         id: existing?.id || id,
         employeeId: e.id,
@@ -345,6 +371,12 @@ export function action(s, user, p, { minPinLength = 4 } = {}) {
       };
       if (existing) Object.assign(existing, result);
       else s.schedule.push(result);
+      break;
+    }
+    case "deleteSchedule": {
+      requireRole(user, "chef");
+      result = lookup(s.schedule, p.id);
+      s.schedule = s.schedule.filter(entry => entry.id !== result.id);
       break;
     }
     case "copyWeek": {

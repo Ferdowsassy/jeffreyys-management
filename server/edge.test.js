@@ -47,7 +47,7 @@ test("payroll counts returned cash once, with chef counts overriding provisional
   assert.equal(payroll(base)[0].payout, 30);
   assert.equal(payroll(base)[0].retainedCash, 2);
 });
-test("kitchen action responses never expose wages; seed includes handoff example", async (t) => {
+test("kitchen action responses expose only own wages; seed includes handoff example", async (t) => {
   const { request, login } = await fixture(t);
   const kitchen = await login("samira", "2345"),
     chef = await login("alex", "1234");
@@ -62,7 +62,9 @@ test("kitchen action responses never expose wages; seed includes handoff example
   );
   const response = await request("/api/action", { type: "clockIn" }, kitchen);
   assert.equal(response.status, 200);
-  assert.doesNotMatch(JSON.stringify(response.body), /hourlyRate|wageHistory/);
+  assert.equal(response.body.state.employees.find(e => e.id === "samira").hourlyRate, 16);
+  assert.doesNotMatch(JSON.stringify(response.body.state.employees.filter(e => e.id !== "samira")), /hourlyRate|wageHistory/);
+  assert.doesNotMatch(JSON.stringify(response.body.state.shifts.filter(s => s.employeeId !== "samira")), /hourlyRate/);
   assert.ok(
     (await request("/api/state", undefined, chef)).body.handoffs.some(
       (h) => h.demo,

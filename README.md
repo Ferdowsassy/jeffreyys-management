@@ -2,6 +2,12 @@
 
 A React + Express operations app for Jeffreyys: shifts, delivery orders, cash handoffs, schedules, payroll estimates, tasks, delivery zones, and role-based views for chefs, kitchen staff, and drivers.
 
+Chefs can filter the team by role, maintain employee phone numbers, and view earnings per shift or per employee/month under **Zeiten**. Kitchen employees have **Mein Verdienst** for their own monthly earnings. They never receive other employees' wages or customer contacts.
+
+The weekly plan supports editing, moving and removing scheduled shifts directly, role filters, overnight labels and returning to the current week. Chef and kitchen dashboards show active drivers' voluntarily shared locations on an OpenStreetMap map, with timestamps and today's average minutes from order creation to delivery (including preparation/waiting time).
+
+Analysis compares 7, 30, 90 or 365 days with the previous equally sized period. Optional order items are entered manually with name, quantity and unit price; chefs can add/correct items for historical orders under **Analyse**. Article totals count delivered orders with recorded items only, show price ranges when prices vary, and disclose coverage. Existing orders have no article breakdown until it is entered; OCR still extracts the original receipt fields.
+
 ## Verify locally
 
 Requirements: Node.js 22+ and npm.

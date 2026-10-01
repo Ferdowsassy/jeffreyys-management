@@ -68,7 +68,7 @@ export async function createApp({
     res.set("X-Content-Type-Options", "nosniff");
     res.set("Referrer-Policy", "no-referrer");
     res.set("X-Frame-Options", "DENY");
-    res.set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
+    res.set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-src https://www.openstreetmap.org; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
     if (production) res.set("Strict-Transport-Security", "max-age=31536000");
     if (stopping) return res.status(503).json({error:"Server shutting down"});
     if (req.method === "POST" && req.headers.origin) {

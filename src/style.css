@@ -938,6 +938,26 @@ input::placeholder {
   color: #6e775e;
   font-size: 10px;
 }
+.driver-map { padding: 18px 24px; }
+.personal-earnings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; padding: 0 24px 24px; }
+.earnings-owner { grid-column: 1 / -1; margin: 0; font-weight: 600; }
+.personal-earnings div { display: flex; flex-direction: column; gap: 10px; }
+.personal-earnings span { color: var(--muted); font-size: 11px; }
+.personal-earnings strong { font-size: 25px; }
+.driver-map iframe { width: 100%; height: 340px; border: 1px solid var(--line); border-radius: 8px; margin: 12px 0; }
+.order-items { grid-column: 1 / -1; border: 1px solid var(--line); border-radius: 8px; padding: 16px; min-width: 0; }
+.item-row { display: grid; grid-template-columns: minmax(140px, 2fr) minmax(70px, 1fr) minmax(90px, 1fr) auto; gap: 12px; margin-bottom: 12px; align-items: end; }
+.item-row label { min-width: 0; }
+.item-row input { width: 100%; }
+.article-capture { padding: 18px 24px; }
+.article-capture summary { cursor: pointer; }
+.article-capture form { display: grid; gap: 16px; margin-top: 16px; }
+.schedule-shift .text-button { text-align: left; }
+@media (max-width: 600px) {
+  .item-row { grid-template-columns: 1fr 1fr; }
+  .item-row label:first-child { grid-column: 1 / -1; }
+  .toolbar .segmented { flex-wrap: wrap; }
+}
 .week-day .muted {
   font-size: 10px;
   display: block;
