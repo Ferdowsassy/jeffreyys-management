@@ -1571,3 +1571,9 @@ input::placeholder {
 
 .correction-request { padding: 16px 0; border-top: 1px solid var(--border, #e5e5e5); }
 .correction-request p { overflow-wrap: anywhere; }
+.return-marker span, .store-marker span { display: block; color: white; border: 2px solid white; border-radius: 18px; padding: 5px 9px; font-weight: 700; font-size: 12px; text-align: center; white-space: nowrap; box-shadow: 0 2px 6px #0003; }
+.return-marker span { border-style: dashed; }
+.return-route { animation: return-route-flow 1.2s linear infinite; }
+.return-route.overdue { animation: none; }
+@keyframes return-route-flow { to { stroke-dashoffset: -20; } }
+@media (prefers-reduced-motion: reduce) { .return-route { animation: none; } }

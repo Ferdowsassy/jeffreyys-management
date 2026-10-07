@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { api, Title, Panel, Form, Empty, Badge, roleName } from "./main";
 import { euro, day, sum, hours, payroll } from "./finance";
+import {StoreSettings, ReturnTripControls} from "./return-trip";
 import {ShiftCorrections, ShiftApprovals} from "./shift-corrections";
 import { scanReceipt } from "./receipt-ocr";
 import { summarizeItems } from "./order-items";
@@ -406,6 +407,7 @@ export function Management({ user, data, page, act, notify }) {
       "Zeit für Transparenz.",
       "Erfasste Schichten prüfen und nachvollziehbar korrigieren.",
     ],
+    Einstellungen: ["Dein Laden.", "Ladenadresse und Routen für Rückfahrten."],
     Finanzen: [
       "Die Zahlen hinter dem Betrieb.",
       "Kosten als Grundlage für deine Gewinnschätzung.",
@@ -599,6 +601,7 @@ export function Management({ user, data, page, act, notify }) {
         </Panel>
       </>
     );
+  if (page === "Einstellungen") body = <StoreSettings data={data} act={act} notify={notify} />;
   if (page === "Finanzen")
     body = (
       <Panel
@@ -1026,6 +1029,7 @@ export function Driver({ user, data, page, act, notify }) {
         />
       )}{" "}
       {user.role === "kitchen" && page === "Verdienst" && <Title title="Mein Verdienst" subtitle="Deine Arbeitszeit und dein Verdienst nach Monat." />}
+      {user.role === "driver" && ["Schicht", "Tour"].includes(page) && <ReturnTripControls user={user} data={data} act={act} notify={notify} />}
       {page === "Schicht" && (
         <>
           <Panel

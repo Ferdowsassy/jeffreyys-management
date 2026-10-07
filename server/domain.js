@@ -1,3 +1,4 @@
+import {driverColor, driverColors} from "../shared/return-trip.js";
 import { payroll } from "../shared/payroll.js";
 import { randomUUID } from "node:crypto";
 import { safeEmployee, hashPin, seed } from "./store.js";
@@ -86,24 +87,26 @@ export function filterState(state, user) {
   const s = structuredClone(state);
   s.employees = s.employees.map(safeEmployee);
   s.payroll = payroll(state);
+  s.settings.routingConfigured = !!(s.settings.routingApiKey || process.env.ORS_API_KEY);
+  delete s.settings.routingApiKey;
   s.shiftRequests = (s.shiftRequests || []).filter(r => user.role === "chef" || r.employeeId === user.id);
   if (user.role === "chef") return s;
   s.audit = [];
-  s.settings = { longShiftHours: s.settings.longShiftHours };
+  s.settings = { longShiftHours: s.settings.longShiftHours, store:s.settings.store, routingConfigured:s.settings.routingConfigured };
   if (user.role === "driver") {
     s.employees = s.employees.filter((e) => e.id === user.id);
     for (const key of ["orders", "shifts", "schedule", "handoffs", "payroll"])
       s[key] = s[key].filter((x) => x.employeeId === user.id);
     s.tasks = [];
   } else {
-    s.employees = s.employees.map(({ id, name, role, active, demo, hourlyRate, wageHistory, location, phone }) => ({
+    s.employees = s.employees.map(({ id, name, role, active, demo, hourlyRate, wageHistory, location, phone, returnTrip }) => ({
       id,
       name,
       role,
       active,
       demo,
       ...(id === user.id ? { hourlyRate, wageHistory, phone } : {}),
-      ...(role === "driver" && active && s.shifts.some(shift => shift.employeeId === id && !shift.end) ? {location} : {}),
+      ...(role === "driver" && active && s.shifts.some(shift => shift.employeeId === id && !shift.end) ? {location, returnTrip} : {}),
     }));
     s.shifts = s.shifts.map(({ id, employeeId, start, end, demo, hourlyRate }) => ({
       id,
@@ -157,11 +160,12 @@ function applyShiftCorrection(s, shift, start, end, now) {
       fail("Deliver all open orders before closing shift", 409);
     createHandoff(s, shift, false, now);
     delete lookup(s.employees, shift.employeeId).location;
+    delete lookup(s.employees, shift.employeeId).returnTrip;
   }
   shift.start = start;
   shift.end = end;
 }
-export function action(s, user, p, { minPinLength = 4 } = {}) {
+export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
   const validPin = (pin) => typeof pin === "string" && new RegExp(`^\\d{${minPinLength},12}$`).test(pin);
   if (!p || typeof p !== "object" || typeof p.type !== "string")
     fail("Action type required");
@@ -174,6 +178,7 @@ export function action(s, user, p, { minPinLength = 4 } = {}) {
       if (s.shifts.some((x) => x.employeeId === user.id && !x.end))
         fail("Already clocked in", 409);
       const e = employee();
+      delete e.returnTrip;
       result = {
         id,
         employeeId: user.id,
@@ -194,6 +199,7 @@ export function action(s, user, p, { minPinLength = 4 } = {}) {
         fail("Deliver all open orders before clocking out", 409);
       shift.end = now;
       delete employee().location;
+      delete employee().returnTrip;
       result = createHandoff(s, shift, p.cashConfirmed, now);
       break;
     }
@@ -424,6 +430,37 @@ export function action(s, user, p, { minPinLength = 4 } = {}) {
       result = { copied };
       break;
     }
+    case "saveRoutingKey":
+      requireRole(user, "chef");
+      s.settings.routingApiKey = text(p.key, "API-Schlüssel", 1000);
+      break;
+    case "saveStoreLocation": {
+      requireRole(user, "chef");
+      s.settings.store = {address:text(p.address, "Ladenadresse", 400),
+        latitude:number(p.latitude,"latitude",-90,90),longitude:number(p.longitude,"longitude",-180,180)};
+      break;
+    }
+    case "startReturnTrip": {
+      requireRole(user, "driver");
+      const shift = s.shifts.find(x => x.employeeId === user.id && !x.end);
+      if (!returnTrip || !shift || returnTrip.shiftId !== shift.id || Date.now()-Date.parse(returnTrip.startedAt)>30000) fail("Bitte einstempeln und die Rückfahrt erneut starten.",409);
+      const store = s.settings.store;
+      if (!store || store.address !== returnTrip.destination.address || store.latitude !== returnTrip.destination.latitude || store.longitude !== returnTrip.destination.longitude)
+        fail("Die Ladenadresse wurde geändert. Bitte Rückfahrt erneut starten.",409);
+      let color = employee().returnTrip?.color || driverColor(user.id);
+      const used = new Set(s.employees.filter(e => e.id !== user.id && e.returnTrip).map(e => e.returnTrip.color));
+      if (used.has(color)) color = driverColors.find(candidate => !used.has(candidate)) || color;
+      let hue = 0;
+      while (used.has(color)) color = `hsl(${(++hue*137.508)%360}, 75%, 38%)`;
+      employee().returnTrip = {...returnTrip,color};
+      result = employee().returnTrip;
+      break;
+    }
+    case "finishReturnTrip":
+    case "cancelReturnTrip":
+      requireRole(user, "driver");
+      delete employee().returnTrip;
+      break;
     case "saveSettings":
       requireRole(user, "chef");
       s.settings = {

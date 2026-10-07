@@ -269,6 +269,7 @@ const chefNav = [
   ["Gebiete", MapPin],
   ["Aufgaben", ClipboardList],
   ["Finanzen", Settings],
+  ["Einstellungen", Settings],
   ["Daten", Database],
 ];
 function App() {
@@ -648,10 +649,10 @@ export function Drivers({ data }) {
           })}
       </div>
       <div className="driver-map">
-        <Suspense fallback={<p>Karte wird geladen …</p>}><LiveDriverMap drivers={drivers.filter(e => data.shifts.some(s => s.employeeId === e.id && !s.end))} /></Suspense>
+        <Suspense fallback={<p>Karte wird geladen …</p>}><LiveDriverMap drivers={drivers.filter(e => data.shifts.some(s => s.employeeId === e.id && !s.end))} store={data.settings.store} /></Suspense>
       </div>
       <div className="panel-foot">
-        Lieferzeit: von Erfassung bis Zustellung, inklusive Wartezeit. Die Karte zeigt den zuletzt freiwillig geteilten Standort.
+        Lieferzeit: von Erfassung bis Zustellung, inklusive Wartezeit. Die Karte zeigt freiwillig geteilte GPS-Standorte und geschätzte Rückfahrten. Rückfahrten sind keine Live-Ortung.
       </div>
     </Panel>
   );

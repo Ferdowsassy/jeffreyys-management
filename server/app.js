@@ -5,6 +5,7 @@ import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { createStore, safeEmployee, checkPin } from "./store.js";
 import { createMysqlStore } from "./mysql-store.js";
+import {prepareReturnTrip, searchStore} from "./return-routing.js";
 import { filterState, action, fail, payroll } from "./domain.js";
 
 const sessionUser = (employee) =>
@@ -21,7 +22,7 @@ const sessionUser = (employee) =>
 export async function createApp({
   dataFile = fileURLToPath(new URL("./data/state.json", import.meta.url)),
   demo = false, bootstrap, database, production = false, origin, trustProxy = false,
-  secureCookie = production, assumeHttps = false, staticDir, aiFetch = fetch,
+  secureCookie = production, assumeHttps = false, staticDir, aiFetch = fetch, routingFetch = fetch,
 } = {}) {
   if (production && (demo || !secureCookie || !origin || new URL(origin).protocol !== "https:"))
     throw new Error("Production requires HTTPS APP_ORIGIN, secure cookies and DEMO_MODE=false");
@@ -209,15 +210,36 @@ export async function createApp({
       clients.delete(client);
     });
   });
-  app.post("/api/action", async (req, res, next) => {
+  const routingLimits = new Map(), routingPending = new Set();
+  function limitRouting(id) {
+    let value = routingLimits.get(id);
+    if (!value || value.until <= Date.now()) {value = {count:0,until:Date.now()+60000};routingLimits.set(id,value);}
+    if (++value.count > 6) fail("Bitte eine Minute warten, bevor du weitere Routen oder Adressen anfragst.",429);
+  }
+  app.post("/api/store/search", async (req,res,next) => {
     try {
+      if (req.user.role !== "chef") fail("Chef access required",403);
+      limitRouting(req.user.id);
+      res.json({results:await searchStore(store.read().settings, req.body?.address, routingFetch)});
+    } catch(error) {next(error);}
+  });
+  app.post("/api/action", async (req, res, next) => {
+    let routingHeld = false;
+    try {
+      let returnTrip;
+      if (req.body?.type === "startReturnTrip") {
+        if (routingPending.has(req.user.id)) fail("Eine Rückfahrt wird bereits berechnet.",409);
+        limitRouting(req.user.id);
+        routingPending.add(req.user.id);routingHeld = true;
+        returnTrip = await prepareReturnTrip(store.read(),req.user,req.body,routingFetch);
+      }
       const result = await store.transact((s) => {
         const current = s.employees.find(
           (e) => e.id === req.user.id && e.active,
         );
         if (!current) fail("Sign in required", 401);
         if (req.body.type === "reset" && !demo) fail("Demo reset disabled", 403);
-        return action(s, current, req.body, { minPinLength: demo ? 4 : 8 });
+        return action(s, current, req.body, { minPinLength: demo ? 4 : 8, returnTrip });
       });
       const state = store.read(),
         current = state.employees.find((e) => e.id === req.user.id && e.active);
@@ -238,7 +260,7 @@ export async function createApp({
       });
     } catch (e) {
       next(e);
-    }
+    } finally {if (routingHeld) routingPending.delete(req.user.id);}
   });
   app.get("/api/state", (req, res) =>
     res.json(filterState(store.read(), req.user)),
@@ -323,7 +345,7 @@ export async function createApp({
         };
         const totals = payroll(scoped);
         const summary = {
-          settings: s.settings,
+          settings: filterState(s,req.user).settings,
           orders: scoped.orders.map(
             ({ amount, payment, status, deliveryFee, createdAt, demo }) => ({
               amount,
