@@ -86,6 +86,7 @@ export function filterState(state, user) {
   const s = structuredClone(state);
   s.employees = s.employees.map(safeEmployee);
   s.payroll = payroll(state);
+  s.shiftRequests = (s.shiftRequests || []).filter(r => user.role === "chef" || r.employeeId === user.id);
   if (user.role === "chef") return s;
   s.audit = [];
   s.settings = { longShiftHours: s.settings.longShiftHours };
@@ -139,6 +140,26 @@ function createHandoff(s, shift, cashConfirmed, now) {
   const handoff = {id:randomUUID(), employeeId:shift.employeeId, shiftId:shift.id, expected, counted:null, driverConfirmed:cashConfirmed, chefConfirmed:false, createdAt:now, demo:false};
   s.handoffs.push(handoff);
   return handoff;
+}
+function validateShiftRange(s, employeeId, shiftId, start, end) {
+  if (Date.parse(start) > Date.now() || (end && (Date.parse(end) <= Date.parse(start) || Date.parse(end) > Date.now())))
+    fail("Beginn und Ende müssen in der Vergangenheit liegen; Ende muss nach Beginn liegen.");
+  const endMs = end ? Date.parse(end) : Infinity;
+  if (s.shifts.some(x => x.id !== shiftId && x.employeeId === employeeId
+    && Date.parse(x.start) < endMs && (x.end ? Date.parse(x.end) : Infinity) > Date.parse(start)))
+    fail("Die vorgeschlagenen Zeiten überschneiden sich mit einer anderen Schicht.", 409);
+}
+function applyShiftCorrection(s, shift, start, end, now) {
+  if (shift.end && !end) fail("Cannot reopen a closed shift; clock in for a new shift", 409);
+  validateShiftRange(s, shift.employeeId, shift.id, start, end);
+  if (!shift.end && end) {
+    if (s.orders.some(o => o.shiftId === shift.id && o.status === "open"))
+      fail("Deliver all open orders before closing shift", 409);
+    createHandoff(s, shift, false, now);
+    delete lookup(s.employees, shift.employeeId).location;
+  }
+  shift.start = start;
+  shift.end = end;
 }
 export function action(s, user, p, { minPinLength = 4 } = {}) {
   const validPin = (pin) => typeof pin === "string" && new RegExp(`^\\d{${minPinLength},12}$`).test(pin);
@@ -424,46 +445,55 @@ export function action(s, user, p, { minPinLength = 4 } = {}) {
       result.confirmedBy = user.id;
       break;
     }
+    case "requestShiftCorrection": {
+      requireRole(user, "driver", "kitchen");
+      const shift = p.shiftId ? lookup(s.shifts, p.shiftId) : null;
+      if (shift && shift.employeeId !== user.id) fail("Not your shift", 403);
+      const start = timestamp(p.start), end = timestamp(p.end);
+      validateShiftRange(s, user.id, shift?.id, start, end);
+      if (shift && shift.start === start && shift.end === end) fail("Die Zeiten wurden nicht geändert.");
+      s.shiftRequests ||= [];
+      if (shift && s.shiftRequests.some(r => r.shiftId === shift.id && r.status === "pending"))
+        fail("Für diese Schicht wartet bereits eine Anfrage auf Freigabe.", 409);
+      if (!shift && s.shiftRequests.some(r => r.employeeId === user.id && !r.shiftId && r.status === "pending"
+        && Date.parse(r.start) < Date.parse(end) && Date.parse(r.end) > Date.parse(start)))
+        fail("Für diesen Zeitraum wartet bereits eine Anfrage auf Freigabe.", 409);
+      result = {id, employeeId:user.id, shiftId:shift?.id || null, start, end,
+        originalStart:shift?.start || null, originalEnd:shift?.end || null,
+        reason:text(p.reason, "Begründung", 1000), status:"pending", createdAt:now, demo:false};
+      s.shiftRequests.push(result);
+      break;
+    }
+    case "reviewShiftCorrection": {
+      requireRole(user, "chef");
+      result = lookup(s.shiftRequests || [], p.id);
+      if (result.status !== "pending") fail("Diese Anfrage wurde bereits entschieden.", 409);
+      if (!["approved", "rejected"].includes(p.decision)) fail("Invalid decision");
+      if (p.decision === "approved") {
+        if (result.shiftId) {
+          const shift = lookup(s.shifts, result.shiftId);
+          if (shift.start !== result.originalStart || shift.end !== result.originalEnd)
+            fail("Die Schicht wurde inzwischen geändert. Bitte ablehnen und eine neue Anfrage stellen lassen.", 409);
+          applyShiftCorrection(s, shift, result.start, result.end, now);
+        } else {
+          validateShiftRange(s, result.employeeId, null, result.start, result.end);
+          const e = lookup(s.employees, result.employeeId);
+          const date = new Intl.DateTimeFormat("en-CA", {timeZone:"Europe/Berlin",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(result.start));
+          const shift = {id:randomUUID(),employeeId:e.id,start:result.start,end:result.end,
+            hourlyRate:rate(e.wageHistory, date, "hourlyRate", e.hourlyRate),demo:false};
+          s.shifts.push(shift);
+          result.appliedShiftId = shift.id;
+        }
+      }
+      result.status = p.decision;
+      result.reviewedAt = now;
+      result.reviewedBy = user.id;
+      break;
+    }
     case "updateShift": {
       requireRole(user, "chef");
       result = lookup(s.shifts, p.id);
-      if (result.end && p.end === null) fail("Cannot reopen a closed shift; clock in for a new shift", 409);
-      const start = timestamp(p.start),
-        end = p.end === null ? null : timestamp(p.end);
-      if (
-        Date.parse(start) > Date.now() ||
-        (end &&
-          (Date.parse(end) <= Date.parse(start) ||
-            Date.parse(end) > Date.now()))
-      )
-        fail("Invalid shift range");
-      if (
-        !end &&
-        s.shifts.some(
-          (x) =>
-            x.id !== result.id && x.employeeId === result.employeeId && !x.end,
-        )
-      )
-        fail("Employee already clocked in", 409);
-      const endMs = end ? Date.parse(end) : Infinity;
-      if (
-        s.shifts.some(
-          (x) =>
-            x.id !== result.id &&
-            x.employeeId === result.employeeId &&
-            Date.parse(x.start) < endMs &&
-            (x.end ? Date.parse(x.end) : Infinity) > Date.parse(start),
-        )
-      )
-        fail("Shifts overlap", 409);
-      if (result.end && !end) fail("Cannot reopen a closed shift; clock in for a new shift", 409);
-      if (!result.end && end) {
-        if (s.orders.some(o => o.shiftId === result.id && o.status === "open"))
-          fail("Deliver all open orders before closing shift", 409);
-        createHandoff(s, result, false, now);
-      }
-      result.start = start;
-      result.end = end;
+      applyShiftCorrection(s, result, timestamp(p.start), p.end === null ? null : timestamp(p.end), now);
       break;
     }
     case "clearDemo": {

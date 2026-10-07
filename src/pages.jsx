@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { api, Title, Panel, Form, Empty, Badge, roleName } from "./main";
 import { euro, day, sum, hours, payroll } from "./finance";
+import {ShiftCorrections, ShiftApprovals} from "./shift-corrections";
 import { scanReceipt } from "./receipt-ocr";
 import { summarizeItems } from "./order-items";
 const today = () => day(Date.now());
@@ -773,6 +774,7 @@ export function Management({ user, data, page, act, notify }) {
             onChange={(e) => setDate(e.target.value)}
           />}
         </div>
+        <ShiftApprovals data={data} act={act} />
         {timeView === "month" ? <Payroll data={data} /> : <>
         <Panel title="Erfasste Arbeitszeit">
           <Table
@@ -1084,6 +1086,7 @@ export function Driver({ user, data, page, act, notify }) {
               </button>
             </div>
           </Panel>
+          <ShiftCorrections user={user} data={data} act={act} />
           {user.role === "driver" && (
             <div className="quick-actions">
               <button className="primary" onClick={() => setForm(!form)}>

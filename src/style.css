@@ -1568,3 +1568,6 @@ input::placeholder {
     animation: none !important;
   }
 }
+
+.correction-request { padding: 16px 0; border-top: 1px solid var(--border, #e5e5e5); }
+.correction-request p { overflow-wrap: anywhere; }

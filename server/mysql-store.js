@@ -1,7 +1,7 @@
 import mysql from 'mysql2/promise';
 import { bootstrapState, seed } from './store.js';
 
-export const collections = ['employees', 'orders', 'shifts', 'schedule', 'zones', 'tasks', 'handoffs', 'audit'];
+export const collections = ['employees', 'orders', 'shifts', 'schedule', 'zones', 'tasks', 'handoffs', 'audit', 'shiftRequests'];
 const table = key => `jm_${key}`;
 const decode = value => typeof value === 'string' ? JSON.parse(value) : value;
 
@@ -94,6 +94,7 @@ export async function createMysqlStore(config, {demo = false, bootstrap, initial
         if (Number(rows[0].count)) throw new Error('Database has records without metadata; refusing initialization');
       }
       const next = initialState ? structuredClone(initialState) : demo ? seed() : bootstrapState(await (typeof bootstrap === 'function' ? bootstrap() : bootstrap));
+      next.shiftRequests ??= [];
       await persist(connection, next);
       return {state: next, revision: Number(meta.revision) + 1};
     });

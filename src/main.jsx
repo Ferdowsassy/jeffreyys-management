@@ -376,6 +376,7 @@ function App() {
             ["Verdienst", Wallet],
           ];
   const current = nav.some((n) => n[0] === page) ? page : nav[0][0];
+  const pendingCorrections = (data.shiftRequests || []).filter(r => r.status === "pending").length;
   const demo =
     data.orders.some((o) => o.demo) || data.employees.some((e) => e.demo);
   return (
@@ -406,6 +407,7 @@ function App() {
               >
                 <Icon size={19} />
                 {label}
+                {label === "Zeiten" && user.role === "chef" && pendingCorrections > 0 && <span className="nav-count">{pendingCorrections}</span>}
                 {label === "Aufgaben" && (
                   <span className="nav-count">
                     {data.tasks.filter((t) => !t.done).length}
@@ -464,6 +466,10 @@ function App() {
           </div>
         </header>
         <main className="content">
+          {user.role === "chef" && pendingCorrections > 0 && <div className="notice location-sharing" role="status">
+            <strong>{pendingCorrections} Zeitkorrektur-Anfrage(n) warten auf deine Entscheidung.</strong>
+            <button className="secondary" onClick={() => go("Zeiten")}>Anfragen prüfen</button>
+          </div>}
           {user.role === "driver" && data.shifts.some(s => s.employeeId === user.id && !s.end) && <div className="notice location-sharing">
             <div><strong>{locationSharing.tracking ? "Standortfreigabe aktiv" : "Standortfreigabe"}</strong><p role="status">{locationSharing.status}</p><small>Für laufende Updates die App geöffnet lassen. Geräte können GPS im Hintergrund pausieren.</small></div>
             <button className="secondary" onClick={locationSharing.toggle}>{locationSharing.tracking ? "Standortfreigabe stoppen" : "Standortfreigabe aktivieren"}</button>

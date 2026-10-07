@@ -130,3 +130,11 @@ State is refreshed from database revisions before requests. SSE subscribers also
 The legacy filesystem store remains for local demos, existing file deployments, and isolated regression tests. MySQL configuration never falls back silently to it.
 
 Tests cover real HTTP auth, role isolation, unauthorized writes, financial snapshots/cash reconciliation, validation/rollback, concurrent persistence, SSE, origin enforcement/rate limits, demo lifecycle, missing-key AI behavior, and the standalone entrypoint. Tests use isolated temporary data files and do not alter the running app's database.
+
+### Employee time correction requests
+
+Drivers and kitchen staff submit `requestShiftCorrection {shiftId,start,end,reason}` for their own shifts, or omit `shiftId` for a completely missed shift. Both proposed timestamps must be in the past; end must follow start. Requests are stored separately in `shiftRequests` and never change payroll before approval. Non-chef state responses include only the employee's own requests.
+
+Chef `reviewShiftCorrection {id,decision:"approved"|"rejected"}` decides each pending request once. Approval rechecks overlap and the original shift snapshot, uses the existing cash handoff rules when closing an active shift, and applies the correction transactionally. A newly recorded missed shift uses the historical wage rate for its start date in Berlin. Rejection preserves recorded time. Requests retain the reason, original/proposed times, decision, reviewer and decision timestamp; actions enter the audit log. The owner sees a persistent in-app notification and pending count under Zeiten, updated through the existing live connection. No email or phone push is sent.
+
+The file store initializes the new collection for existing files; MySQL creates `jm_shiftRequests` automatically on startup. JSON-to-MySQL migration treats a missing collection as empty.
