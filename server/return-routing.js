@@ -32,7 +32,7 @@ export async function searchStore(settings, query, send = fetch) {
   const key = routingKey(settings);
   if (!key) fail('Bitte zuerst einen openrouteservice API-Schlüssel in den Einstellungen speichern.',503);
   if (typeof query !== 'string' || query.trim().length < 5 || query.length > 400) fail('Bitte eine vollständige Adresse eingeben.');
-  const url = new URL('https://api.openrouteservice.org/geocode/search');
+  const url = new URL('https://api.heigit.org/pelias/v1/search');
   url.searchParams.set('api_key', key);
   url.searchParams.set('text',query.trim());
   url.searchParams.set('size','5');
@@ -57,7 +57,7 @@ export async function prepareReturnTrip(state, user, payload, send = fetch) {
   const captured = Date.parse(payload.capturedAt);
   if (!Number.isFinite(captured) || Date.now()-captured > 30000 || captured-Date.now() > 5000)
     fail('Der GPS-Standort ist veraltet. Bitte erneut starten.');
-  const response = await request(`https://api.openrouteservice.org/v2/directions/${profile}/geojson`,key,
+  const response = await request(`https://api.heigit.org/openrouteservice/v2/directions/${profile}/geojson`,key,
     {coordinates:[[longitude,latitude],[destination.longitude,destination.latitude]],instructions:false},send);
   const feature = response.features?.[0], summary = feature?.properties?.summary;
   const coordinates = feature?.geometry?.coordinates;
