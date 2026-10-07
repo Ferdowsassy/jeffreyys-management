@@ -117,13 +117,14 @@ export function filterState(state, user) {
       ...(employeeId === user.id ? {hourlyRate} : {}),
     }));
     s.orders = s.orders.map(
-      ({ id, employeeId, orderNumber, status, createdAt, deliveredAt, demo, shiftId, amount, payment, deliveryFee }) => ({
+      ({ id, employeeId, orderNumber, status, createdAt, deliveredAt, completionSource, demo, shiftId, amount, payment, deliveryFee }) => ({
         id,
         employeeId,
         orderNumber,
         status,
         createdAt,
         deliveredAt,
+        completionSource,
         demo,
         ...(employeeId === user.id ? {shiftId, amount, payment, deliveryFee} : {}),
       }),
@@ -135,12 +136,12 @@ export function filterState(state, user) {
   }
   return s;
 }
-function createHandoff(s, shift, cashConfirmed, now) {
+function createHandoff(s, shift, cashConfirmed, now, cashRetained = false) {
   if (s.handoffs.some(h => h.shiftId === shift.id)) return null;
   const expected = euros(s.orders.filter(o => o.shiftId === shift.id && o.status === "delivered" && o.payment === "cash").reduce((n,o) => n+cents(o.amount),0));
   const owner = s.employees.find(e => e.id === shift.employeeId);
   if (owner.role !== "driver" && expected === 0) return null;
-  const handoff = {id:randomUUID(), employeeId:shift.employeeId, shiftId:shift.id, expected, counted:null, driverConfirmed:cashConfirmed, chefConfirmed:false, createdAt:now, demo:false};
+  const handoff = {id:randomUUID(), employeeId:shift.employeeId, shiftId:shift.id, expected, counted:null, driverConfirmed:cashConfirmed, chefConfirmed:false, cashRetained, createdAt:now, demo:false};
   s.handoffs.push(handoff);
   return handoff;
 }
@@ -191,16 +192,17 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
       break;
     }
     case "clockOut": {
-      if (typeof p.cashConfirmed !== "boolean")
-        fail("cashConfirmed must be boolean");
       const shift = s.shifts.find((x) => x.employeeId === user.id && !x.end);
       if (!shift) fail("No active shift", 409);
-      if (s.orders.some((o) => o.employeeId === user.id && o.status === "open"))
-        fail("Deliver all open orders before clocking out", 409);
+      for (const order of s.orders.filter(o => o.employeeId === user.id && o.status === "open")) {
+        order.status = "delivered";
+        order.deliveredAt = now;
+        order.completionSource = "clockOut";
+      }
       shift.end = now;
       delete employee().location;
       delete employee().returnTrip;
-      result = createHandoff(s, shift, p.cashConfirmed, now);
+      result = createHandoff(s, shift, false, now, true);
       break;
     }
     case "addOrder": {

@@ -12,6 +12,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { api, Title, Panel, Form, Empty, Badge, roleName } from "./main";
+import {payroll as calculatePayroll} from "../shared/payroll";
 import { euro, day, sum, hours, payroll } from "./finance";
 import {StoreSettings, ReturnTripControls} from "./return-trip";
 import {ShiftCorrections, ShiftApprovals} from "./shift-corrections";
@@ -366,7 +367,7 @@ function OrderTable({ orders, data }) {
         euro(o.amount),
         o.payment === "cash" ? "Bar" : "Online",
         <Badge tone={o.status === "delivered" ? "green" : "orange"}>
-          {o.status === "delivered" ? "Zugestellt" : "Offen"}
+          {o.status === "delivered" ? o.completionSource === "clockOut" ? "Zugestellt · beim Ausstempeln" : "Zugestellt" : "Offen"}
         </Badge>,
       ])}
     />
@@ -642,7 +643,7 @@ export function Management({ user, data, page, act, notify }) {
                   Erwartet <b>{euro(h.expected)}</b>
                 </p>
                 <Badge tone={h.driverConfirmed ? "green" : "orange"}>
-                  {h.driverConfirmed
+                  {h.cashRetained && !h.chefConfirmed ? "Beim Fahrer · vom Lohn abgezogen" : h.driverConfirmed
                     ? "Fahrer bestätigt"
                     : "Fahrerbestätigung offen"}
                 </Badge>
@@ -669,7 +670,7 @@ export function Management({ user, data, page, act, notify }) {
                       h.expected,
                     ),
                   ]}
-                  submit="Übergabe bestätigen"
+                  submit={h.cashRetained ? "Nachträgliche Bargeldabgabe bestätigen" : "Übergabe bestätigen"}
                   onSubmit={(v) =>
                     act("confirmHandoff", {
                       id: h.id,
@@ -951,6 +952,7 @@ export function Driver({ user, data, page, act, notify }) {
     [scanPhoto, setScanPhoto] = useState(''),
     [tick, setTick] = useState(0);
   useEffect(()=>()=>{if(scanPhoto)URL.revokeObjectURL(scanPhoto);},[scanPhoto]);
+  const personalPay = calculatePayroll({...data, employees:data.employees.filter(e => e.id === user.id)})[0];
   const active = data.shifts.find((s) => s.employeeId === user.id && !s.end);
   useEffect(() => {
     const t = setInterval(() => setTick((t) => t + 1), 30000);
@@ -1059,6 +1061,7 @@ export function Driver({ user, data, page, act, notify }) {
                     ) + sum(todays, (o) => o.deliveryFee),
                   )}
                   <span>Heute verdient · vor Bargeldabzug</span>
+                  <small>Auszahlung gesamt: {euro(personalPay.payout)} · Bargeld bei dir: {euro(personalPay.retainedCash)}</small>
                 </div>
               )}
               <button
@@ -1066,21 +1069,7 @@ export function Driver({ user, data, page, act, notify }) {
                 onClick={async () => {
                   try {
                     if (active) {
-                      const cash = sum(
-                        orders.filter(
-                          (o) =>
-                            o.payment === "cash" &&
-                            new Date(o.createdAt) >= new Date(active.start),
-                        ),
-                        (o) => o.amount,
-                      );
-                      const cashConfirmed =
-                        cash > 0
-                          ? confirm(
-                              `${euro(cash)} Bargeld abgegeben? OK bestätigt. Abbrechen beendet die Schicht mit offener Übergabe.`,
-                            )
-                          : true;
-                      await act("clockOut", { cashConfirmed });
+                      await act("clockOut");
                     } else await act("clockIn");
                   } catch {}
                 }}
@@ -1089,6 +1078,7 @@ export function Driver({ user, data, page, act, notify }) {
                 {active ? "Ausstempeln" : "Jetzt einstempeln"}
               </button>
             </div>
+          {user.role === "driver" && <p className="muted">Beim Ausstempeln werden offene Lieferungen automatisch als zugestellt markiert. Das Bargeld bleibt bei dir und wird von deiner Auszahlung abgezogen.</p>}
           </Panel>
           <ShiftCorrections user={user} data={data} act={act} />
           {user.role === "driver" && (
@@ -1381,7 +1371,7 @@ export function Analytics({ data, notify, act }) {
               .filter((e) => e.role === "driver")
               .map((e) => {
                 const os = a.os.filter((o) => o.employeeId === e.id),
-                  del = os.filter((o) => o.deliveredAt);
+                  del = os.filter((o) => o.deliveredAt && o.completionSource !== "clockOut");
                 return [
                   e.name,
                   os.length,

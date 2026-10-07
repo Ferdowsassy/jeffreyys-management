@@ -58,7 +58,7 @@ Zone = {id,postalCode,name,fee,effectiveDate,
         feeHistory:[{effectiveDate,fee}],demo}
 Task = {id,text,done,createdAt,demo}
 Handoff = {id,employeeId,shiftId,expected,counted:null|number,
-           driverConfirmed,chefConfirmed,createdAt,demo,
+           driverConfirmed,chefConfirmed,cashRetained,createdAt,demo,
            confirmedAt?:ISO,confirmedBy?:employeeId}
 Settings = {foodCostPercent:30,fixedCosts:2500,longShiftHours:8,flatFee:0,demo}
 Audit = {id,type,employeeId,targetId?:string|null,createdAt,demo}
@@ -77,7 +77,7 @@ Employees optionally have `phone` (up to 40 characters). Orders optionally have 
 | type | Payload | Permissions / behavior |
 |---|---|---|
 | clockIn | none | Own shift, any role; snapshots effective wage; conflict if already active |
-| clockOut | `cashConfirmed:boolean` | Own shift; refuses open orders; driver receives one handoff for this shift |
+| clockOut | No fields required | Own shift; automatically delivers open orders; cash retained and deducted from payout |
 | addOrder | `address,postalCode,city,amount,payment,orderNumber,noAddress?:boolean,employeeId?:string` | Driver/chef; must have active shift; chef may choose employee; snapshots delivery fee |
 | delivered | `id` | Driver's own order or chef; idempotent |
 | addTask | `text,visibility?:'team'|'chef'` | Kitchen/chef; only chefs may create chef-only tasks |
@@ -104,7 +104,7 @@ Location writes use the normal transaction and SSE invalidation path, but do not
 - Snapshot hourly rate at clock-in and delivery fee at order creation; later rate edits do not rewrite history.
 - Hours × snapshot wage is rounded once per shift to cents. Delivery pay includes only delivered orders.
 - Cash collected includes **delivered cash orders only**. Online/open orders are not cash owed.
-- `cashConfirmed:true` means the driver states that the complete expected shift cash was **physically handed back**, not merely that they checked the screen. Until chef counting, this return is provisional and `pendingHandoffs` signals that payroll is not settled.
+- Clock-out always retains cash with the driver. Legacy handoffs with `driverConfirmed:true` still represent a provisional physical return until chef counting. New retained-cash records have `cashRetained:true` and do not count as pending physical handoffs.
 - Chef-confirmed `counted` replaces (does not add to) the driver's provisional return.
 - `retainedCash = max(0, collectedCash - returnedCash)`.
 - `payout = hourlyPay + deliveryPay - retainedCash`. A negative payout means cash still owed; it is not silently clamped to zero. Returned cash is never subtracted from payroll a second time.
@@ -148,3 +148,9 @@ Driver `startReturnTrip {latitude,longitude,capturedAt,transport}` requires an a
 `returnTrip` stores the destination snapshot, start/arrival timestamps, geometry (Leaflet latitude/longitude points), duration, distance, transport and color. Both storage adapters persist this within existing employee records. Kitchen sees active-driver return trips with no payroll or routing credentials; drivers see only their own trip. Chef and kitchen maps locally interpolate estimated progress by elapsed time and route distance; smooth marker updates need no requests from the driver. This is an estimate without live traffic, delays or detours. ETA expiry leaves the trip marked as awaiting confirmation. Driver `finishReturnTrip` or `cancelReturnTrip` clears it, as do clock-out and owner time edits that close an active shift. Logout leaves the saved estimate available. Changing store settings preserves destinations of already-started trips.
 
 A route provider key and a confirmed store address must be configured before real routing can work. External integration and physical device behavior have not been exercised for this change because the user requested skipping tests.
+
+### Automatic deliveries on clock-out and daily statistics
+
+`clockOut` no longer requires `cashConfirmed`; any legacy field is ignored. Within one storage transaction it marks the employee's open orders delivered with `deliveredAt` equal to clock-out time and `completionSource:"clockOut"`, closes the shift, clears location/return route, and records a handoff with `driverConfirmed:false` and `cashRetained:true`. Payroll includes the delivered fees and deducts retained cash. Existing handoffs and prior cash returns are preserved. Chef `confirmHandoff` can acknowledge a later actual return and reverse the corresponding deduction; this is an explicit physical-cash action, never implied by clock-out. Negative payouts remain visible.
+
+The Statistik tab uses already-authorized state: driver data stays own-only; kitchen sees operational counts and only their own financial values; chef sees business revenue and wages. Daily counts distinguish orders created on the selected day, deliveries completed on that day (including automatic closures), and currently open orders. Work hours are clipped to Berlin calendar-day boundaries, including DST, and earnings combine those wage portions with delivered-order fees by order creation date. Driver cash balance and payout cards are clearly labeled all-record totals, rather than a settled daily payslip. Hourly counts and a seven-day order trend include accessible value tables. Average delivery minutes exclude automatic clock-out completions, whose actual delivery time is unknown.

@@ -1577,3 +1577,11 @@ input::placeholder {
 .return-route.overdue { animation: none; }
 @keyframes return-route-flow { to { stroke-dashoffset: -20; } }
 @media (prefers-reduced-motion: reduce) { .return-route { animation: none; } }
+.daily-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(185px, 1fr)); gap: 12px; margin: 18px 0; }
+.daily-stat { padding: 18px; border: 1px solid var(--line); border-radius: 10px; background: white; display: flex; flex-direction: column; gap: 10px; }
+.daily-stat small { color: var(--muted); }
+.daily-stat strong { font-size: 24px; }
+.daily-chart { display: flex; gap: 10px; align-items: end; overflow-x: auto; padding: 24px 0 16px; min-height: 210px; }
+.daily-bar-slot { display: flex; flex: 1; min-width: 40px; flex-direction: column; justify-content: end; align-items: center; gap: 8px; font-size: 12px; }
+.daily-bar { width: 75%; background: var(--orange); border-radius: 5px 5px 0 0; }
+.daily-bar-slot small { white-space: nowrap; }

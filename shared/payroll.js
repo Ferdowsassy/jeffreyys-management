@@ -57,7 +57,7 @@ export function payroll(state, now = Date.now()) {
       retainedCash: euros(retained),
       payout: euros(hourlyCents + deliveryCents - retained),
       pendingHandoffs: state.handoffs.filter(
-        (h) => h.employeeId === employee.id && !h.chefConfirmed,
+        (h) => h.employeeId === employee.id && !h.chefConfirmed && !h.cashRetained,
       ).length,
     };
   });
