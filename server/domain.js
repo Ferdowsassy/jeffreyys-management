@@ -87,7 +87,10 @@ export function filterState(state, user) {
   const s = structuredClone(state);
   s.employees = s.employees.map(safeEmployee);
   s.payroll = payroll(state);
-  s.settings.routingConfigured = !!(s.settings.routingApiKey || process.env.ORS_API_KEY);
+  s.settings.routingConfigured = !!(s.settings.geoapifyApiKey || process.env.GEOAPIFY_API_KEY);
+  delete s.settings.geoapifyApiKey;
+  delete s.settings.googleMapsBrowserKey;
+  delete s.settings.googleMapsServerKey;
   delete s.settings.routingApiKey;
   s.shiftRequests = (s.shiftRequests || []).filter(r => user.role === "chef" || r.employeeId === user.id);
   if (user.role === "chef") return s;
@@ -434,7 +437,7 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
     }
     case "saveRoutingKey":
       requireRole(user, "chef");
-      s.settings.routingApiKey = text(p.key, "API-Schlüssel", 1000);
+      s.settings.geoapifyApiKey = text(p.key, "Geoapify API-Schlüssel", 1000);
       break;
     case "saveStoreLocation": {
       requireRole(user, "chef");

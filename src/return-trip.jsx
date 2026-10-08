@@ -7,10 +7,10 @@ export function StoreSettings({data, act, notify}) {
   const [results,setResults] = useState([]), [busy,setBusy] = useState(false);
   const store = data.settings.store;
   return <>
-    <Panel title="Routendienst" subtitle="Für Routen und Ankunftszeiten wird ein openrouteservice API-Schlüssel benötigt.">
-      <p>{data.settings.routingConfigured ? 'Routendienst eingerichtet. Du kannst den Schlüssel hier ersetzen.' : 'Routendienst noch nicht eingerichtet.'}</p>
-      <p><a href="https://account.heigit.org/" target="_blank" rel="noreferrer">openrouteservice Konto und API-Schlüssel</a></p>
-      <Form submit="API-Schlüssel speichern" fields={[{name:'key',label:'openrouteservice API-Schlüssel',type:'password',maxLength:1000}]} onSubmit={async (v) => {
+    <Panel title="Routendienst" subtitle="Für Routen und Ankunftszeiten wird ein Geoapify API-Schlüssel benötigt.">
+      <p>{data.settings.routingConfigured ? 'Geoapify eingerichtet. Du kannst den Schlüssel hier ersetzen.' : 'Geoapify noch nicht eingerichtet.'}</p>
+      <p><a href="https://myprojects.geoapify.com/" target="_blank" rel="noreferrer">Geoapify Konto und API-Schlüssel</a></p>
+      <Form submit="Geoapify Schlüssel speichern" fields={[{name:'key',label:'Geoapify API-Schlüssel',type:'password',maxLength:1000}]} onSubmit={async (v) => {
         try {await act('saveRoutingKey',{key:v.key});} catch {}
       }} />
     </Panel>
@@ -29,7 +29,7 @@ export function StoreSettings({data, act, notify}) {
           try {await act('saveStoreLocation',result);setResults([]);} catch {} finally {setBusy(false);}
         }}>Als Ladenadresse speichern</button>
       </div>)}
-      <small>Adresssuche und Routen: <a href="https://openrouteservice.org/" target="_blank" rel="noreferrer">openrouteservice</a> · Kartendaten © OpenStreetMap contributors</small>
+      <small>Adresssuche und Routen: <a href="https://www.geoapify.com/" target="_blank" rel="noreferrer">Geoapify</a> · Kartendaten © OpenStreetMap contributors</small>
     </Panel>
   </>;
 }

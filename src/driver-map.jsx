@@ -123,6 +123,6 @@ export default function LiveDriverMap({drivers, store}) {
         </div>;
       })}
     </div>
-    {!!returning.length && <small>Routen: <a href="https://openrouteservice.org/" target="_blank" rel="noreferrer">openrouteservice</a> · © OpenStreetMap contributors</small>}
+    {!!returning.length && <small>Routen: <a href="https://www.geoapify.com/" target="_blank" rel="noreferrer">Geoapify</a> · © OpenStreetMap contributors</small>}
   </>;
 }
