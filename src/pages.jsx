@@ -13,9 +13,11 @@ import {
 } from "lucide-react";
 import { api, Title, Panel, Form, Empty, Badge, roleName } from "./main";
 import {payroll as calculatePayroll} from "../shared/payroll";
-import { euro, day, sum, hours, payroll } from "./finance";
+import { euro, day, sum, hours, formatHours, payroll } from "./finance";
 import {StoreSettings, ReturnTripControls} from "./return-trip";
-import {ShiftCorrections, ShiftApprovals} from "./shift-corrections";
+import {ShiftApprovals} from "./shift-corrections";
+import EarningsWeek from "./earnings-week";
+import {dailyEarnings} from "../shared/daily-stats";
 import { scanReceipt } from "./receipt-ocr";
 import { summarizeItems } from "./order-items";
 const today = () => day(Date.now());
@@ -219,12 +221,13 @@ export function Schedule({ user, data, act }) {
     </>
   );
 }
-function Payroll({ data, personal = false }) {
+function Payroll({ data, user, personal = false }) {
   const [month, setMonth] = useState(today().slice(0, 7)),
     [detail, setDetail] = useState(null);
   const rows = data.employees.map((e) => ({ e, ...payroll(e, data, month) }));
   return (
     <>
+      <EarningsWeek user={user} data={data} />
       <div className="toolbar">
         <label>
           Abrechnungsmonat{" "}
@@ -252,7 +255,7 @@ function Payroll({ data, personal = false }) {
                     "Name",
                     "Rolle",
                     "Telefon",
-                    "Stunden",
+                    "Arbeitszeit",
                     "Lohn",
                     "Liefergeld",
                     "Verdienst",
@@ -265,7 +268,7 @@ function Payroll({ data, personal = false }) {
                     r.e.name,
                     roleName[r.e.role],
                     r.e.phone || "",
-                    r.hours.toFixed(2),
+                    formatHours(r.hours),
                     r.wages,
                     r.fees,
                     r.wages + r.fees,
@@ -293,7 +296,7 @@ function Payroll({ data, personal = false }) {
           {rows.map(r => <React.Fragment key={r.e.id}>
             <p className="earnings-owner">{r.e.name} · {roleName[r.e.role]}</p>
             <div><span>Verdienst vor Bargeldabzug</span><strong>{euro(r.wages + r.fees)}</strong></div>
-            <div><span>Arbeitsstunden</span><strong>{r.hours.toFixed(2)}</strong></div>
+            <div><span>Arbeitsstunden</span><strong>{formatHours(r.hours)}</strong></div>
             <div><span>Stundenlohn gesamt</span><strong>{euro(r.wages)}</strong></div>
             <div><span>Auszahlung</span><strong>{euro(r.payout)}</strong></div>
             {r.fees !== 0 && <div><span>Liefergeld</span><strong>{euro(r.fees)}</strong></div>}
@@ -304,7 +307,7 @@ function Payroll({ data, personal = false }) {
             "Mitarbeiter",
             "Rolle",
             "Telefon",
-            "Stunden",
+            "Arbeitszeit",
             "Lohn",
             "Liefergeld",
             "Verdienst",
@@ -320,7 +323,7 @@ function Payroll({ data, personal = false }) {
             </button>,
             roleName[r.e.role],
             r.e.phone || "—",
-            r.hours.toFixed(2),
+            formatHours(r.hours),
             euro(r.wages),
             euro(r.fees),
             euro(r.wages + r.fees),
@@ -423,7 +426,7 @@ export function Management({ user, data, page, act, notify }) {
     setEditing(null);
     setShow(!show);
   };
-  if (page === "Geld") body = <Payroll data={data} />;
+  if (page === "Geld") body = <Payroll data={data} user={user} />;
   if (page === "Team")
     body = (
       <>
@@ -779,14 +782,14 @@ export function Management({ user, data, page, act, notify }) {
           />}
         </div>
         <ShiftApprovals data={data} act={act} />
-        {timeView === "month" ? <Payroll data={data} /> : <>
+        {timeView === "month" ? <Payroll data={data} user={user} /> : <>
         <Panel title="Erfasste Arbeitszeit">
           <Table
             headers={[
               "Mitarbeiter",
               "Beginn",
               "Ende",
-              "Stunden",
+              "Arbeitszeit",
               "Verdienst",
               "Hinweis",
               "",
@@ -795,7 +798,7 @@ export function Management({ user, data, page, act, notify }) {
               person(data, s.employeeId),
               time(s.start),
               time(s.end),
-              hours(s).toFixed(2),
+              formatHours(hours(s)),
               euro(Math.round(hours(s) * Math.round(s.hourlyRate * 100)) / 100 + sum(data.orders.filter(o => o.shiftId === s.id && o.status === "delivered"), o => o.deliveryFee)),
               <Badge
                 tone={
@@ -999,7 +1002,7 @@ export function Driver({ user, data, page, act, notify }) {
     setScanBusy(true);
     setScanStatus('Foto vorbereiten …');
     try {
-      const r = await scanReceipt(file, setScanStatus);
+      const r = await scanReceipt(file, setScanStatus, {resolveMaps:async url=>(await api('receipts/maps',{url})).address});
       setReceipt(r.draft || {});
       setItems([]);
       setScan(r);
@@ -1031,7 +1034,6 @@ export function Driver({ user, data, page, act, notify }) {
         />
       )}{" "}
       {user.role === "kitchen" && page === "Verdienst" && <Title title="Mein Verdienst" subtitle="Deine Arbeitszeit und dein Verdienst nach Monat." />}
-      {user.role === "driver" && ["Schicht", "Tour"].includes(page) && <ReturnTripControls user={user} data={data} act={act} notify={notify} />}
       {page === "Schicht" && (
         <>
           <Panel
@@ -1046,20 +1048,12 @@ export function Driver({ user, data, page, act, notify }) {
           >
             <div className="shift-overview">
               <div className="shift-clock">
-                {active ? hours(active).toFixed(2) : "0,00"}
-                <span>Stunden gearbeitet</span>
+                {formatHours(active ? hours(active) : 0)}
+                <span>Arbeitszeit</span>
               </div>
               {user.role === "driver" && (
                 <div className="shift-clock">
-                  {euro(
-                    sum(
-                      data.shifts.filter(
-                        (s) =>
-                          s.employeeId === user.id && day(s.start) === today(),
-                      ),
-                      (s) => hours(s) * s.hourlyRate,
-                    ) + sum(todays, (o) => o.deliveryFee),
-                  )}
+                  {euro(dailyEarnings(data, user.id, today()).gross)}
                   <span>Heute verdient · vor Bargeldabzug</span>
                   <small>Auszahlung gesamt: {euro(personalPay.payout)} · Bargeld bei dir: {euro(personalPay.retainedCash)}</small>
                 </div>
@@ -1078,9 +1072,8 @@ export function Driver({ user, data, page, act, notify }) {
                 {active ? "Ausstempeln" : "Jetzt einstempeln"}
               </button>
             </div>
-          {user.role === "driver" && <p className="muted">Beim Ausstempeln werden offene Lieferungen automatisch als zugestellt markiert. Das Bargeld bleibt bei dir und wird von deiner Auszahlung abgezogen.</p>}
+          {user.role === "driver" && <details className="shift-help"><summary>Was passiert beim Ausstempeln?</summary><p>Offene Lieferungen werden als zugestellt markiert. Bargeld bleibt bei dir und wird von der Auszahlung abgezogen.</p></details>}
           </Panel>
-          <ShiftCorrections user={user} data={data} act={act} />
           {user.role === "driver" && (
             <div className="quick-actions">
               <button className="primary" onClick={() => setForm(!form)}>
@@ -1102,6 +1095,7 @@ export function Driver({ user, data, page, act, notify }) {
           )}
         </>
       )}
+      {user.role === "driver" && ["Schicht", "Tour"].includes(page) && <ReturnTripControls user={user} data={data} act={act} notify={notify} />}
       {(page === "Belege" || page === "Tour") && (
         <div className="toolbar">
           <span>
@@ -1114,20 +1108,22 @@ export function Driver({ user, data, page, act, notify }) {
                 )} Bar`
               : "Navigation öffnet Google Maps. Für GPS-Updates die App geöffnet lassen."}
           </span>
-          <button className="primary" onClick={() => setForm(!form)}>
-            <Plus size={17} />
-            Beleg erfassen
-          </button>
+          <div className="row">
+            <label className="secondary file-button"><Camera size={17} />{scanBusy ? 'Beleg wird gelesen …' : 'Beleg fotografieren'}<input type="file" accept="image/*" capture="environment" disabled={scanBusy} onChange={e=>{photo(e.target.files[0]);e.target.value='';}} /></label>
+            <button className="primary" onClick={() => setForm(!form)}><Plus size={17} />Beleg erfassen</button>
+          </div>
         </div>
       )}
       {scanBusy && <div className="notice" role="status" aria-live="polite">{scanStatus} · Das Foto bleibt auf deinem Gerät.</div>}
       {form && (
         <Panel
+          action={<button className="text-button" disabled={scanBusy} onClick={() => {setForm(false);setReceipt({});setItems([]);setScan(null);setScanPhoto('');}}>Abbrechen</button>}
           title="Beleg prüfen & übernehmen"
           subtitle="Keine automatische Buchung: Adresse, Betrag und Zahlungsart kontrollieren."
         >
           {scan && <div className="receipt-review">
-            <p>Auf deinem Gerät gelesen · kein KI-Dienst. Vergleiche alle Angaben mit dem Originalbeleg, besonders Bestellnummer und Adresse.</p>
+            <p>{scan.format || "Beleg"} · {scan.addressSource === "qr" ? "Adresse aus Google-Maps-QR" : scan.draft.address ? "Adresse aus Belegtext" : "Adresse bitte ergänzen"}. Bitte Angaben prüfen.</p>
+            {scan.mapsLink && <a className="secondary" href={scan.mapsLink} target="_blank" rel="noreferrer">QR-Adresse in Google Maps öffnen</a>}
             {scanPhoto && <details><summary>Originalbeleg anzeigen</summary><img className="receipt-preview" src={scanPhoto} alt="Originalbeleg zum Vergleichen" /></details>}
             {!!scan.warnings.length && <ul>{scan.warnings.map(message=><li key={message}>{message}</li>)}</ul>}
             <details><summary>Gelesenen Text anzeigen</summary><pre>{scan.text}</pre></details>
@@ -1210,16 +1206,12 @@ export function Driver({ user, data, page, act, notify }) {
             ))}
           </div>
           {!open.length && <Empty>Alles zugestellt. Gute Fahrt zurück!</Empty>}
-          <div className="notice">
-            Entfernungssortierung, eingebettete Navigation und Mehrstopp-Routing
-            sind noch nicht verbunden. Keine geschätzten Entfernungen werden
-            erfunden.
-          </div>
         </>
       )}
       {page === "Verdienst" && (
         <Payroll
-          personal={user.role === "kitchen"}
+          personal
+          user={user}
           data={{
             ...data,
             employees: data.employees.filter((e) => e.id === user.id),

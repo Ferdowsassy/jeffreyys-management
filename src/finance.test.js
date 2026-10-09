@@ -39,3 +39,12 @@ test("payroll subtracts retained cash, not cash already handed back", async () =
   assert.equal(result.retained, 10);
   assert.equal(result.payout, 23);
 });
+
+test('work durations display hours and minutes with carry and no decimal hours', async()=>{
+  const {formatHours}=await import('./finance.js');
+  assert.equal(formatHours(1.5),'1 Std. 30 Min.');
+  assert.equal(formatHours(1.999),'2 Std. 00 Min.');
+  assert.equal(formatHours(0),'0 Std. 00 Min.');
+  assert.equal(formatHours(-2),'0 Std. 00 Min.');
+  assert.equal(formatHours(25.25),'25 Std. 15 Min.');
+});

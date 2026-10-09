@@ -1,6 +1,6 @@
 import {chromium,expect} from '@playwright/test';
 import {createApp} from '../server/app.js';
-import {mkdtemp,rm,readFile} from 'node:fs/promises';
+import {mkdtemp,rm,readFile,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {resolve} from 'node:path';
 import assert from 'node:assert/strict';
@@ -21,7 +21,7 @@ const browser=await chromium.launch({headless:true});
 try{
   const page=await browser.newPage(), errors=[], forbidden=[];
   page.on('pageerror',e=>{errors.push(e.message);console.error(e.message);});
-  page.on('request',r=>{if((!r.url().startsWith(base+'/') && !/^https:\/\/fonts\./.test(r.url()) && !/^(blob|data):/.test(r.url())) || r.url().includes('/api/ai/receipt') || (r.method()==='POST' && !r.url().endsWith('/api/login')))forbidden.push(r.url());});
+  page.on('request',r=>{if((!r.url().startsWith(base+'/') && !/^https:\/\/fonts\./.test(r.url()) && !/^(blob|data):/.test(r.url())) || r.url().includes('/api/ai/receipt') || (r.method()==='POST' && !r.url().endsWith('/api/login') && !r.url().endsWith('/api/receipts/maps')))forbidden.push(r.url());});
   await page.goto(base);
   await page.getByRole('button',{name:/Leo/}).click();
   await page.getByLabel('PIN',{exact:true}).fill('3456');
@@ -30,8 +30,10 @@ try{
   await page.locator('input[type=file]').setInputFiles(process.env.OCR_RECEIPT_FILE || resolve('scripts/fixtures/demo-receipt.png'));
   const expected=process.env.OCR_EXPECTED_JSON_FILE?JSON.parse(await readFile(process.env.OCR_EXPECTED_JSON_FILE,'utf8')):{amount:'27.5',orderNumber:'SCAN-123',address:'Teststraße 12',postalCode:'80802',city:'München',payment:'online'};
   await expect(page.getByText('Beleg prüfen & übernehmen',{exact:true})).toBeVisible({timeout:90000});
+  if(process.env.OCR_TEXT_FILE)await writeFile(process.env.OCR_TEXT_FILE,await page.locator('.receipt-review pre').textContent());
   for(const [field,label] of Object.entries({amount:'Betrag (€)',orderNumber:'Bestellnummer',address:'Straße & Hausnummer',postalCode:'PLZ (5 Ziffern)',city:'Ort',payment:'Zahlungsart'}))
-    await expect(field==='payment'?page.locator('select[name="payment"]'):page.getByLabel(label,{exact:true})).toHaveValue(String(expected[field]),{timeout:1000});
+    if(expected[field]!==null)await expect(field==='payment'?page.locator('select[name="payment"]'):page.getByLabel(label,{exact:true})).toHaveValue(String(expected[field]),{timeout:1000});
+  if(expected.warning)await expect(page.locator('.receipt-review ul')).toContainText(expected.warning);
   assert.deepEqual(errors,[]);assert.deepEqual(forbidden,[]);
-  console.log('PASS real on-device OCR, customer address, order number, total and payment; no AI, image uploads or external OCR requests');
+  console.log(expected.warning ? 'PASS receipt total, address and payment; ambiguous order number flagged for manual review; no image upload' : 'PASS real on-device OCR, customer address, order number, total and payment; no AI, image uploads or external OCR requests');
 }finally{await browser.close();server.closeAllConnections();await new Promise(r=>server.close(r));await app.locals.close();await rm(dir,{recursive:true,force:true});}

@@ -13,7 +13,7 @@
     "start": "NODE_ENV=production node hostinger.cjs",
     "build": "node scripts/prepare-ocr.mjs && vite build",
     "test": "node --test server/*.test.js src/*.test.js",
-    "test:ui": "node scripts/ui-regressions.mjs all && node scripts/ocr-check.mjs && node scripts/production-ui.mjs && node scripts/features-ui.mjs && node scripts/location-ui.mjs && node scripts/pwa-check.mjs",
+    "test:ui": "node scripts/ui-regressions.mjs all && node scripts/ocr-check.mjs && node scripts/production-ui.mjs && node scripts/features-ui.mjs && node scripts/location-ui.mjs && node scripts/pwa-check.mjs && node scripts/ux-improvements.mjs",
     "verify": "npm run build && npm test && npm run test:ui"
   },
   "dependencies": {
@@ -21,6 +21,7 @@
     "@tesseract.js-data/eng": "^1.0.0",
     "@vitejs/plugin-react": "^4.7.0",
     "express": "^5.1.0",
+    "jsqr": "^1.4.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.468.0",
     "mysql2": "^3.24.5",

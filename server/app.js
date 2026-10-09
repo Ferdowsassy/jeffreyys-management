@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { createStore, safeEmployee, checkPin } from "./store.js";
 import { createMysqlStore } from "./mysql-store.js";
 import {prepareReturnTrip, searchStore} from "./return-routing.js";
+import {resolveReceiptMaps} from "./receipt-maps.js";
 import { filterState, action, fail, payroll } from "./domain.js";
 
 const sessionUser = (employee) =>
@@ -22,7 +23,7 @@ const sessionUser = (employee) =>
 export async function createApp({
   dataFile = fileURLToPath(new URL("./data/state.json", import.meta.url)),
   demo = false, bootstrap, database, production = false, origin, trustProxy = false,
-  secureCookie = production, assumeHttps = false, staticDir, aiFetch = fetch, routingFetch = fetch,
+  secureCookie = production, assumeHttps = false, staticDir, aiFetch = fetch, routingFetch = fetch, receiptMapsFetch = fetch,
 } = {}) {
   if (production && (demo || !secureCookie || !origin || new URL(origin).protocol !== "https:"))
     throw new Error("Production requires HTTPS APP_ORIGIN, secure cookies and DEMO_MODE=false");
@@ -211,11 +212,21 @@ export async function createApp({
     });
   });
   const routingLimits = new Map(), routingPending = new Set();
-  function limitRouting(id) {
+  function limitRouting(id, category='routing') {
+    id=category+':'+id;
     let value = routingLimits.get(id);
     if (!value || value.until <= Date.now()) {value = {count:0,until:Date.now()+60000};routingLimits.set(id,value);}
-    if (++value.count > 6) fail("Bitte eine Minute warten, bevor du weitere Routen oder Adressen anfragst.",429);
+    if (++value.count > (category==='receipts'?30:6)) fail("Bitte eine Minute warten, bevor du weitere Routen oder Adressen anfragst.",429);
   }
+  app.post("/api/receipts/maps", async (req,res,next) => {
+    try {
+      if(req.user.role!=="driver" && req.user.role!=="chef")fail("Driver or chef access required",403);
+      const url=req.body?.url;
+      if(typeof url!=="string")fail("Bitte einen Google-Maps-Link angeben.");
+      limitRouting(req.user.id,'receipts');
+      res.json({address:await resolveReceiptMaps(url,receiptMapsFetch,store.read().settings.googleMapsServerKey || process.env.GOOGLE_MAPS_SERVER_KEY || '')});
+    } catch(error) {next(error);}
+  });
   app.post("/api/store/search", async (req,res,next) => {
     try {
       if (req.user.role !== "chef") fail("Chef access required",403);

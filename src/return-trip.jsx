@@ -14,6 +14,11 @@ export function StoreSettings({data, act, notify}) {
         try {await act('saveRoutingKey',{key:v.key});} catch {}
       }} />
     </Panel>
+    <Panel title="QR-Adressen auf Belegen" subtitle="Maps-QRs mit ausgeschriebener Adresse funktionieren ohne Schlüssel. Google-Orts-IDs benötigen Places API (New).">
+      <p>{data.settings.receiptMapsConfigured ? 'Google Places eingerichtet.' : 'Google Places noch nicht eingerichtet.'}</p>
+      <p><a href="https://console.cloud.google.com/google/maps-apis/credentials" target="_blank" rel="noreferrer">Google Maps API-Schlüssel verwalten</a></p>
+      <Form submit="Google Places Schlüssel speichern" fields={[{name:'key',label:'Google Places API-Schlüssel',type:'password',maxLength:1000}]} onSubmit={async v=>{try {await act('saveReceiptMapsKey',{key:v.key});} catch {}}} />
+    </Panel>
     <Panel title="Ladenadresse" subtitle="Ziel für alle Rückfahrten. Suche die Adresse und bestätige den passenden Treffer.">
       {store && <p><strong>Gespeichert: {store.address}</strong></p>}
       <p>Bereits gestartete Rückfahrten behalten ihr bisheriges Ziel. Fahrer können ihre Route bei Bedarf neu berechnen.</p>
@@ -62,24 +67,24 @@ export function ReturnTripControls({user,data,act,notify}) {
     setBusy(true);
     try {await act(type);} catch {} finally {setBusy(false);}
   }
-  return <Panel title="Zurück zum Laden" subtitle={data.settings.store?.address || 'Der Chef muss zuerst die Ladenadresse in den Einstellungen speichern.'}>
+  return <Panel title="Zurück zum Laden" subtitle={trip?.destination.address || data.settings.store?.address}>
+    <div className="return-body">
     {!configured && <p>Der Chef muss Ladenadresse und Routendienst unter Einstellungen einrichten.</p>}
     {trip && <div className="notice">
       <strong>{returnStatus(trip,now)}</strong>
       <p>Ankunft ca. {new Date(trip.eta).toLocaleTimeString('de-DE',{timeZone:'Europe/Berlin',hour:'2-digit',minute:'2-digit'})} · {transportNames[trip.transport]}</p>
-      <p>Ziel dieser Rückfahrt: {trip.destination.address}</p>
       <div className="toolbar">
         <button className="primary" disabled={busy} onClick={()=>finish('finishReturnTrip')}>Bin im Laden</button>
         <button className="secondary" disabled={busy} onClick={()=>finish('cancelReturnTrip')}>Rückfahrt abbrechen</button>
       </div>
     </div>}
     <div className="toolbar">
-      <span>Rückfahrt mit dem Auto</span>
       <button className="primary" disabled={busy || !active || !configured} onClick={start}>
         {busy ? 'Bitte warten …' : trip ? 'Route und Ankunft neu berechnen' : 'Ich fahre zurück zum Laden'}
       </button>
     </div>
-    {!active && <p>Bitte zuerst einstempeln.</p>}
-    <small>Einmaliger Standort beim Start. Chef und Küche sehen Route und geschätzte Ankunft auch bei geschlossenem Browser. Ohne Live-Verkehr; bei Verzögerungen neu berechnen und die Rückkehr bestätigen.</small>
+    {configured && !active && <p>Bitte zuerst einstempeln.</p>}
+    </div>
+
   </Panel>;
 }

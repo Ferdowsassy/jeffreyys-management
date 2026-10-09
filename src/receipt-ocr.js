@@ -1,4 +1,6 @@
 import {parseReceipt} from './receipt-parser';
+import {readReceiptQR} from './receipt-qr';
+import {mapsURL, addressFromMaps} from '../shared/receipt-maps';
 
 async function prepareImage(file) {
   const url=URL.createObjectURL(file), image=new Image();
@@ -34,12 +36,20 @@ async function prepareImage(file) {
     const output=document.createElement('canvas'), resize=Math.min(3,1500/sw,4800/sh,Math.sqrt(7200000/(sw*sh)));
     output.width=Math.max(1,Math.round(sw*resize));output.height=Math.max(1,Math.round(sh*resize));
     const out=output.getContext('2d',{willReadFrequently:true});out.imageSmoothingQuality='high';out.drawImage(image,Math.round(sx),Math.round(sy),Math.round(sw),Math.round(sh),0,0,output.width,output.height);
+    const original=document.createElement('canvas'), qrScale=Math.min(1,2000/image.naturalHeight,1600/image.naturalWidth);
+    original.width=Math.round(image.naturalWidth*qrScale);original.height=Math.round(image.naturalHeight*qrScale);
+    original.getContext('2d').drawImage(image,0,0,original.width,original.height);
+    const qrCodes=await readReceiptQR([original,output]);
+    original.width=original.height=1;
     const pixels=out.getImageData(0,0,output.width,output.height);
     let sum=0;
     for(let i=0;i<pixels.data.length;i+=4)sum+=pixels.data[i]*.299+pixels.data[i+1]*.587+pixels.data[i+2]*.114;
     const mean=sum/(pixels.data.length/4);
     for(let i=0;i<pixels.data.length;i+=4){const gray=(pixels.data[i]*.299+pixels.data[i+1]*.587+pixels.data[i+2]*.114-mean)*1.25+mean;pixels.data[i]=pixels.data[i+1]=pixels.data[i+2]=gray;}
     out.putImageData(pixels,0,0);
+    const title=document.createElement('canvas');
+    title.width=output.width;title.height=Math.round(output.height*.16);
+    title.getContext('2d').drawImage(output,0,0,title.width,title.height,0,0,title.width,title.height);
     // A separate pass on the upper-left block avoids large handwritten marks
     // swallowing the customer address during page segmentation.
     const header=document.createElement('canvas');
@@ -49,15 +59,13 @@ async function prepareImage(file) {
     const headerPixels=headerContext.getImageData(0,0,header.width,header.height);
     for(let i=0;i<headerPixels.data.length;i+=4){const value=headerPixels.data[i]>200?255:0;headerPixels.data[i]=headerPixels.data[i+1]=headerPixels.data[i+2]=value;}
     headerContext.putImageData(headerPixels,0,0);
-    for(let i=0;i<pixels.data.length;i+=4){const value=pixels.data[i]>180?255:0;pixels.data[i]=pixels.data[i+1]=pixels.data[i+2]=value;}
-    out.putImageData(pixels,0,0);
-    return {image:output,header};
+    return {image:output,header,title,qrCodes};
   } finally {URL.revokeObjectURL(url);}
 }
 
-export async function scanReceipt(file, onProgress=()=>{}) {
+export async function scanReceipt(file, onProgress=()=>{}, {resolveMaps}={}) {
   onProgress('Foto vorbereiten …');
-  const {image,header}=await prepareImage(file);
+  const {image,header,title,qrCodes}=await prepareImage(file);
   const {createWorker}=await import('tesseract.js');
   let worker, timer, expired=false;
   const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>{expired=true;reject(Error('Texterkennung dauert zu lange. Bitte erneut versuchen oder den Beleg manuell erfassen.'));},120000);});
@@ -72,6 +80,29 @@ export async function scanReceipt(file, onProgress=()=>{}) {
     const {data}=await withinLimit(worker.recognize(image));
     if(!data.text.trim())throw Error('Kein lesbarer Text erkannt. Bitte ein scharfes Foto bei gutem Licht aufnehmen oder den Beleg manuell erfassen.');
     const parsed=parseReceipt(data.text);
+    let titleText='';
+    if(!parsed.draft.orderNumber) {
+      onProgress('Bestellnummer lesen …');
+      const titleResult=await withinLimit(worker.recognize(title));
+      titleText=titleResult.data.text;
+      const titleDraft=parseReceipt(titleText).draft;
+      if(titleDraft.orderNumber) {
+        parsed.draft.orderNumber=titleDraft.orderNumber;
+        parsed.warnings=parsed.warnings.filter(message=>!/^Bestellnummer nicht/.test(message));
+        parsed.warnings.push('Bestellnummer unsicher gelesen. Bitte 0/O, 6/G und 4/A mit dem Originalbeleg vergleichen.');
+      }
+    }
+    let qrAddress=null, mapsCode=null;
+    for(const code of qrCodes) {
+      if(!mapsURL(code))continue;
+      mapsCode=code;
+      qrAddress=addressFromMaps(code);
+      if(!qrAddress && resolveMaps) {
+        onProgress('Google-Maps-Adresse lesen …');
+        try {qrAddress=await resolveMaps(code);} catch(error) {parsed.warnings.push(error.message || 'Maps-Link konnte nicht gelesen werden. Bitte die Adresse vom Beleg prüfen.');}
+      }
+      if(qrAddress)break;
+    }
     onProgress('Kundenadresse prüfen …');
     const upper=await withinLimit(worker.recognize(header)), address=parseReceipt(upper.data.text).draft;
     if(address.address && address.postalCode && address.city && (!parsed.draft.city || address.city===parsed.draft.city)) {
@@ -79,7 +110,13 @@ export async function scanReceipt(file, onProgress=()=>{}) {
       for(const key of ['address','postalCode','city'])parsed.draft[key]=address[key];
       parsed.warnings=parsed.warnings.filter(message=>!/^Adresse nicht|^PLZ nicht|^Ort nicht/.test(message));
     }
+    if(qrAddress) {
+      if(parsed.draft.address && ['address','postalCode','city'].some(key=>parsed.draft[key] && parsed.draft[key]!==qrAddress[key]))parsed.warnings.push('QR-Code und Belegtext zeigen unterschiedliche Adressen. Bitte prüfen.');
+      Object.assign(parsed.draft,qrAddress);
+      parsed.warnings=parsed.warnings.filter(message=>!/^Adresse nicht|^PLZ nicht|^Ort nicht/.test(message));
+    } else if(mapsCode)parsed.warnings.push('Maps-QR erkannt, aber keine vollständige Postadresse gefunden. Bitte ergänzen.');
+    else if(qrCodes.length)parsed.warnings.push('QR-Code enthält keine Google-Maps-Adresse (z. B. Steuerdaten). Adresse bitte aus dem Beleg prüfen.');
     if(data.confidence<75)parsed.warnings.push('Das Foto ist teilweise schwer lesbar. Bitte alle Angaben sorgfältig prüfen.');
-    return {...parsed,text:data.text+'\n\nKundenbereich:\n'+upper.data.text,confidence:data.confidence};
-  } finally {clearTimeout(timer);if(worker)await worker.terminate();image.width=image.height=header.width=header.height=1;}
+    return {...parsed,addressSource:qrAddress?'qr':'text',mapsLink:mapsCode,text:data.text+'\n\nKundenbereich:\n'+upper.data.text+(titleText?'\n\nBestellkopf:\n'+titleText:''),confidence:data.confidence};
+  } finally {clearTimeout(timer);if(worker)await worker.terminate();image.width=image.height=header.width=header.height=title.width=title.height=1;}
 }

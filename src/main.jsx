@@ -26,6 +26,7 @@ import {
 import { euro, day, sum, hours } from "./finance";
 import { Management, Driver, Schedule, Analytics } from "./pages";
 import "./style.css";
+import {ShiftCorrections} from "./shift-corrections";
 import { InstallApp } from "./install-app";
 import { useDriverLocation } from "./location-sharing";
 const DailyStatistics = lazy(() => import("./daily-statistics"));
@@ -370,6 +371,7 @@ function App() {
             ["Statistik", ChartNoAxesCombined],
             ["Plan", CalendarDays],
             ["Mein Verdienst", Wallet],
+            ["Meine Arbeitszeiten", Clock],
             ["Aufgaben", ClipboardList],
           ]
         : [
@@ -378,6 +380,7 @@ function App() {
             ["Belege", Receipt],
             ["Plan", CalendarDays],
             ["Verdienst", Wallet],
+            ["Meine Arbeitszeiten", Clock],
             ["Statistik", ChartNoAxesCombined],
           ];
   const current = nav.some((n) => n[0] === page) ? page : nav[0][0];
@@ -407,6 +410,7 @@ function App() {
                 <div className="nav-caption">BETRIEB & VERWALTUNG</div>
               )}
               <button
+                aria-current={current === label ? "page" : undefined}
                 className={current === label ? "nav-item active" : "nav-item"}
                 onClick={() => go(label)}
               >
@@ -476,7 +480,7 @@ function App() {
             <button className="secondary" onClick={() => go("Zeiten")}>Anfragen prüfen</button>
           </div>}
           {user.role === "driver" && data.shifts.some(s => s.employeeId === user.id && !s.end) && <div className="notice location-sharing">
-            <div><strong>{locationSharing.tracking ? "Standortfreigabe aktiv" : "Standortfreigabe"}</strong><p role="status">{locationSharing.status}</p><small>Für laufende Updates die App geöffnet lassen. Geräte können GPS im Hintergrund pausieren.</small></div>
+            <div><strong>{locationSharing.tracking ? "Standortfreigabe aktiv" : "Standortfreigabe"}</strong><p role="status">{locationSharing.status}</p><details><summary>Hinweis zum Standort</summary><small>Für laufende Updates die App geöffnet lassen. Geräte können GPS im Hintergrund pausieren.</small></details></div>
             <button className="secondary" onClick={locationSharing.toggle}>{locationSharing.tracking ? "Standortfreigabe stoppen" : "Standortfreigabe aktivieren"}</button>
           </div>}
           {demo && (
@@ -487,7 +491,9 @@ function App() {
               <span>Kein Live-Betrieb</span>
             </div>
           )}
-          {current === "Statistik" ? (
+          {current === "Meine Arbeitszeiten" ? (
+            <><Title title="Meine Arbeitszeiten" subtitle="Schichten prüfen und fehlende Zeiten melden." /><ShiftCorrections user={user} data={data} act={act} /></>
+          ) : current === "Statistik" ? (
             <Suspense fallback={<p>Statistik wird geladen …</p>}><DailyStatistics user={user} data={data} /></Suspense>
           ) : current === "Heute" ? (
             <Dashboard data={data} go={go} act={act} />

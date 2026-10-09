@@ -29,3 +29,15 @@ test('unknown or conflicting values remain blank and never default to online pay
   assert.equal(parseReceipt('Zahlungsart: Bar\nOnline bezahlt').draft.payment,'');
   assert.equal(parseReceipt('RE / AN-Nr.: 9848 / 46').draft.orderNumber,'9848/46');
 });
+
+test('Uber Eats copies recognize provider payment and final discounted total without using store address',()=>{
+  const result=parseReceipt(`Jeffreys Burger\nAltostr 7 81245 München\nJ. Customer\nAdresse: QR-Code\nRE / AN-Nr.: 10309 / 63\nRECHNUNG (KOPIE)\nUberEats (Jeffrey's Burger Aubing)\nDeine Bestellnummer: C21E5\nRabatt -25,80 €\nLieferpauschale 0,99 € B\nRechnungsbetrag 56,66 €\n7% MwSt. (B) 56,66 € 3,71 €\nZahlungsart: UberEats Onlinezahlung`);
+  assert.equal(result.format,'Uber Eats');assert.equal(result.draft.payment,'online');assert.equal(result.draft.amount,56.66);
+  assert.equal(result.draft.orderNumber,'C21E5');assert.equal(result.draft.address,'');
+});
+test('Lieferando receipts recognize explicit delivery address, alphanumeric order and Gesamt after discounts',()=>{
+  const result=parseReceipt(`Jeffrey's Burger\nBestellung 6AAYB4RHEWQB\nLieferart Lieferung\nZahlung Barzahlung\nZahlungsstatus Unbezahlt\nKunde\nTest Customer\nLieferadresse\nTeststr. 10\n80999 München\nDE\nArtikel\n1 x Burger 16,99 €\nZwischensumme 62,77 €\nRabatt 12,55 €\nLiefergebühr 0,00 €\nGesamt 50,22 €\nAktion: LIEFERANDO (12,55 €)`);
+  assert.equal(result.format,'Lieferando');assert.equal(result.draft.payment,'cash');assert.equal(result.draft.amount,50.22);
+  assert.equal(result.draft.orderNumber,'6AAYB4RHEWQB');assert.equal(result.draft.address,'Teststr. 10');assert.equal(result.draft.postalCode,'80999');
+  assert.deepEqual(result.warnings,[]);
+});

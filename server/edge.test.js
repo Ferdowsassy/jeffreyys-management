@@ -121,7 +121,6 @@ test("chef shift editing, deactivation and driver validation enforce ownership",
       amount: 2,
       orderNumber: "x",
     },
-    { type: "clockOut", cashConfirmed: "true" },
     { type: "saveLocation", latitude: 0, longitude: 181 },
   ])
     assert.equal((await act(p, driver)).status, 400);

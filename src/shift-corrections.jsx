@@ -1,6 +1,6 @@
 import React, {useState} from 'react';
 import {Panel, Form, Badge} from './main';
-import {day} from './finance';
+import {day, hours, formatHours} from './finance';
 
 const localTime = value => {
   const d = new Date(value);
@@ -23,8 +23,8 @@ export function ShiftCorrections({user, data, act}) {
       <button className="secondary" onClick={() => setEditing({id:null,start:'',end:''})}>Vergessene Schicht melden</button>
     </div>
     <div className="table-wrap"><table>
-      <thead><tr><th>Beginn</th><th>Ende</th><th>Änderung</th></tr></thead>
-      <tbody>{shifts.map(s => <tr key={s.id}><td>{display(s.start)}</td><td>{display(s.end)}</td><td>
+      <thead><tr><th>Beginn</th><th>Ende</th><th>Arbeitszeit</th><th>Änderung</th></tr></thead>
+      <tbody>{shifts.map(s => <tr key={s.id}><td>{display(s.start)}</td><td>{display(s.end)}</td><td>{formatHours(hours(s))}</td><td>
         <button className="text-button" disabled={pending(s.id)} onClick={() => setEditing(s)}>
           {pending(s.id) ? 'Wartet auf Freigabe' : 'Korrektur beantragen'}
         </button>

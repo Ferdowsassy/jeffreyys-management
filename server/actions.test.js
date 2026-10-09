@@ -25,19 +25,15 @@ test("driver shift lifecycle snapshots rates and deducts only retained cash", as
     await request("/api/state", undefined, driver)
   ).body.orders.find((o) => o.orderNumber === "101");
   assert.equal(order.deliveryFee, 2.5);
-  assert.equal(
-    (await act({ type: "clockOut", cashConfirmed: true })).status,
-    409,
-  );
-  assert.equal((await act({ type: "delivered", id: order.id })).status, 200);
-  assert.equal(
-    (await act({ type: "clockOut", cashConfirmed: true })).status,
-    200,
-  );
+  assert.equal((await act({type:"clockOut"})).status,200);
+  const afterClockOut=(await request("/api/state",undefined,driver)).body;
+  assert.equal(afterClockOut.orders.find(o=>o.id===order.id).status,"delivered");
+  assert.equal(afterClockOut.orders.find(o=>o.id===order.id).completionSource,"clockOut");
   let state = (await request("/api/state", undefined, chef)).body;
   const h = state.handoffs.find((h) => h.employeeId === "leo");
   assert.equal(h.expected, 52.6);
-  assert.equal(h.driverConfirmed, true);
+  assert.equal(h.driverConfirmed, false);
+  assert.equal(h.cashRetained, true);
   assert.equal(
     (await act({ type: "confirmHandoff", id: h.id, counted: 50 }, chef)).status,
     200,

@@ -90,12 +90,13 @@ export function filterState(state, user) {
   s.settings.routingConfigured = !!(s.settings.geoapifyApiKey || process.env.GEOAPIFY_API_KEY);
   delete s.settings.geoapifyApiKey;
   delete s.settings.googleMapsBrowserKey;
+  s.settings.receiptMapsConfigured=!!(s.settings.googleMapsServerKey || process.env.GOOGLE_MAPS_SERVER_KEY);
   delete s.settings.googleMapsServerKey;
   delete s.settings.routingApiKey;
   s.shiftRequests = (s.shiftRequests || []).filter(r => user.role === "chef" || r.employeeId === user.id);
   if (user.role === "chef") return s;
   s.audit = [];
-  s.settings = { longShiftHours: s.settings.longShiftHours, store:s.settings.store, routingConfigured:s.settings.routingConfigured };
+  s.settings = { longShiftHours: s.settings.longShiftHours, store:s.settings.store, routingConfigured:s.settings.routingConfigured, receiptMapsConfigured:s.settings.receiptMapsConfigured };
   if (user.role === "driver") {
     s.employees = s.employees.filter((e) => e.id === user.id);
     for (const key of ["orders", "shifts", "schedule", "handoffs", "payroll"])
@@ -435,6 +436,10 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
       result = { copied };
       break;
     }
+    case "saveReceiptMapsKey":
+      requireRole(user, "chef");
+      s.settings.googleMapsServerKey = text(p.key, "Google Places API-Schlüssel", 1000);
+      break;
     case "saveRoutingKey":
       requireRole(user, "chef");
       s.settings.geoapifyApiKey = text(p.key, "Geoapify API-Schlüssel", 1000);
