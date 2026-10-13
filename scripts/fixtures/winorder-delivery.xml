@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<WinOrder><OrderList>
+  <CreateDateTime>2026-10-13T12:00:00+02:00</CreateDateTime>
+  <Order>
+    <OrderID>WINORDER-DEMO-1001</OrderID>
+    <Customer><DeliveryAddress>
+      <FirstName>Demo</FirstName><LastName>Kunde</LastName>
+      <Street>Teststraße</Street><HouseNo>12</HouseNo>
+      <Zip>80802</Zip><City>München</City>
+      <AddAddress>2. Stock · Testbestellung</AddAddress>
+    </DeliveryAddress></Customer>
+    <StoreData><StoreID>1</StoreID></StoreData>
+    <AddInfo><DeliverType>Lieferung</DeliverType><PaymentType>Bar</PaymentType><Total>25.50</Total><Comment>Nur lokaler Verbindungstest</Comment></AddInfo>
+    <ArticleList><Article><ArticleName>Burger &amp; Pommes</ArticleName><Count>1</Count><Price>25.50</Price></Article></ArticleList>
+  </Order>
+</OrderList></WinOrder>

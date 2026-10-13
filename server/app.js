@@ -7,6 +7,7 @@ import { createStore, safeEmployee, checkPin } from "./store.js";
 import { createMysqlStore } from "./mysql-store.js";
 import {prepareReturnTrip, searchStore} from "./return-routing.js";
 import {resolveReceiptMaps} from "./receipt-maps.js";
+import {winorderCredentials, authenticateWinorder, parseWinorder, importWinorder} from "./winorder.js";
 import { filterState, action, fail, payroll } from "./domain.js";
 
 const sessionUser = (employee) =>
@@ -24,6 +25,7 @@ export async function createApp({
   dataFile = fileURLToPath(new URL("./data/state.json", import.meta.url)),
   demo = false, bootstrap, database, production = false, origin, trustProxy = false,
   secureCookie = production, assumeHttps = false, staticDir, aiFetch = fetch, routingFetch = fetch, receiptMapsFetch = fetch,
+  winorder = winorderCredentials(),
 } = {}) {
   if (production && (demo || !secureCookie || !origin || new URL(origin).protocol !== "https:"))
     throw new Error("Production requires HTTPS APP_ORIGIN, secure cookies and DEMO_MODE=false");
@@ -37,7 +39,8 @@ export async function createApp({
     sessions = new Map(),
     attempts = new Map(),
     clients = new Set(),
-    aiLimits = new Map();
+    aiLimits = new Map(),
+    winorderLimits = new Map();
   app.locals.store = store;
   let stopping = false;
   app.locals.close = async () => {
@@ -51,7 +54,7 @@ export async function createApp({
   const cleanup = setInterval(() => {
     const now = Date.now();
     for (const [key, value] of sessions) if (value.expires <= now) closeSession(key);
-    for (const map of [attempts, aiLimits]) for (const [key, value] of map) if (value.until <= now) map.delete(key);
+    for (const map of [attempts, aiLimits, winorderLimits]) for (const [key, value] of map) if (value.until <= now) map.delete(key);
   }, 60000);
   cleanup.unref();
   app.set("trust proxy", trustProxy);
@@ -62,7 +65,9 @@ export async function createApp({
     } catch { res.status(503).json({status:"database unavailable"}); }
   });
   app.disable("x-powered-by");
-  app.use(express.json({ limit: "8mb" }));
+  const jsonBody = express.json({ limit: "8mb" });
+  const winorderPaths = ['/sendorder', '/api/integrations/winorder/orders'];
+  app.use((req, res, next) => winorderPaths.includes(req.path.replace(/\/$/, '')) ? next() : jsonBody(req, res, next));
   app.use((req, res, next) => {
     if (production && !req.secure && !assumeHttps)
       return res.status(426).json({ error: "HTTPS required" });
@@ -187,9 +192,36 @@ export async function createApp({
       res.json({ ok: true });
     } catch (error) {next(error);}
   });
+  app.post(winorderPaths, (req, res, next) => {
+    try {
+      let limit = winorderLimits.get(req.ip);
+      if (!limit || limit.until <= Date.now()) {
+        limit = {count:0, until:Date.now()+60000}; winorderLimits.set(req.ip, limit);
+      }
+      if (++limit.count > 120) {res.set('Retry-After', '60'); fail('WinOrder request limit reached', 429);}
+      authenticateWinorder(req, winorder);
+      next();
+    } catch (error) {
+      if (error.status === 401) res.set('WWW-Authenticate', 'Basic realm="WinOrder", charset="UTF-8"');
+      next(error);
+    }
+  }, express.raw({type:() => true, limit:'1mb'}), async (req, res, next) => {
+    try {
+      const orders = parseWinorder(req.body);
+      const result = await store.transact(state => importWinorder(state, orders));
+      invalidate();
+      res.json({status:'success', data:result, message:'OK'});
+    } catch (error) {next(error);}
+  });
   app.use("/api", (req, res, next) =>
     req.user ? next() : res.status(401).json({ error: "Sign in required" }),
   );
+  app.get('/api/integrations/winorder', (req, res) => {
+    if (req.user.role !== 'chef') return res.status(403).json({error:'Chef access required'});
+    res.json({configured:!!winorder, username:winorder?.username || null,
+      endpoint:origin ? origin+'/sendorder' : null,
+      lastReceivedAt:store.read().settings.winorderLastReceivedAt || null});
+  });
   app.get("/api/events", (req, res) => {
     res.set({
       "Content-Type": "text/event-stream",

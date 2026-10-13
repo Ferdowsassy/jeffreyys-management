@@ -1626,3 +1626,11 @@ button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visibl
 .shift-help { margin: 0 23px 20px; }
 .panel > .toolbar { margin-inline: 23px; }
 @media (max-width: 600px) { .earnings-body, .return-body { padding: 0 16px 16px; } }
+.order-notes { white-space: pre-wrap; overflow-wrap: anywhere; }
+.order-claim { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 14px 0; }
+.order-claim label { display: grid; gap: 6px; flex: 1; min-width: 140px; }
+.order-queue-card > p, .order-queue-card > details { margin: 16px 22px; }
+.order-queue-card > .order-claim { margin: 18px 22px; }
+.order-queue-card > .text-button { margin: 0 22px 18px; }
+.winorder-details { display: grid; gap: 8px; }
+.winorder-details dd { margin: 0 0 10px; overflow-wrap: anywhere; font-weight: 600; }

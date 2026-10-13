@@ -87,6 +87,7 @@ export function filterState(state, user) {
   const s = structuredClone(state);
   s.employees = s.employees.map(safeEmployee);
   s.payroll = payroll(state);
+  s.availableOrders = s.orders.filter(o => ['available', 'review'].includes(o.status));
   s.settings.routingConfigured = !!(s.settings.geoapifyApiKey || process.env.GEOAPIFY_API_KEY);
   delete s.settings.geoapifyApiKey;
   delete s.settings.googleMapsBrowserKey;
@@ -98,11 +99,15 @@ export function filterState(state, user) {
   s.audit = [];
   s.settings = { longShiftHours: s.settings.longShiftHours, store:s.settings.store, routingConfigured:s.settings.routingConfigured, receiptMapsConfigured:s.settings.receiptMapsConfigured };
   if (user.role === "driver") {
+    s.availableOrders = s.availableOrders.filter(o => o.status === 'available').map(
+      ({id, orderNumber, address, postalCode, city, amount, payment, createdAt, source}) =>
+        ({id, orderNumber, address, postalCode, city, amount, payment, createdAt, source, status:'available'}));
     s.employees = s.employees.filter((e) => e.id === user.id);
     for (const key of ["orders", "shifts", "schedule", "handoffs", "payroll"])
       s[key] = s[key].filter((x) => x.employeeId === user.id);
     s.tasks = [];
   } else {
+    s.availableOrders = [];
     s.employees = s.employees.map(({ id, name, role, active, demo, hourlyRate, wageHistory, location, phone, returnTrip }) => ({
       id,
       name,
@@ -209,6 +214,39 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
       result = createHandoff(s, shift, false, now, true);
       break;
     }
+    case "claimOrder": {
+      requireRole(user, 'driver', 'chef');
+      result = lookup(s.orders, p.id);
+      if (result.status !== 'available' || result.employeeId) fail('Diese Bestellung wurde bereits übernommen oder ist noch nicht freigegeben.', 409);
+      const driverId = user.role === 'chef' ? text(p.employeeId, 'Fahrer') : user.id;
+      const driver = lookup(s.employees, driverId);
+      if (!driver.active || driver.role !== 'driver') fail('Bitte einen aktiven Fahrer wählen.', 409);
+      const shift = s.shifts.find(x => x.employeeId === driverId && !x.end);
+      if (!shift) fail('Bitte zuerst einstempeln, um eine Bestellung zu übernehmen.', 409);
+      const zone = s.zones.find(z => z.postalCode === result.postalCode);
+      Object.assign(result, {employeeId:driverId, shiftId:shift.id, status:'open', claimedAt:now,
+        deliveryFee:zone ? rate(zone.feeHistory || [], today(), 'fee', zone.fee) : 0});
+      break;
+    }
+    case "releaseOrder": {
+      requireRole(user, 'driver', 'chef');
+      result = owned(lookup(s.orders, p.id), user);
+      if (result.source !== 'winorder' || result.status !== 'open') fail('Nur offene WinOrder-Lieferungen können zurückgegeben werden.', 409);
+      Object.assign(result, {employeeId:null, shiftId:null, status:'available', deliveryFee:0});
+      delete result.claimedAt;
+      break;
+    }
+    case "reviewImportedOrder": {
+      requireRole(user, 'chef');
+      result = lookup(s.orders, p.id);
+      if (result.source !== 'winorder' || !['review','available'].includes(result.status)) fail('Diese Bestellung kann nicht mehr freigegeben werden.', 409);
+      if (!['cash','online'].includes(p.payment)) fail('Bitte die Zahlungsart bestätigen.');
+      const postalCode = text(p.postalCode, 'PLZ', 5);
+      if (!/^\d{5}$/.test(postalCode)) fail('Bitte eine fünfstellige PLZ angeben.');
+      Object.assign(result, {address:text(p.address, 'Adresse'), postalCode, city:text(p.city, 'Ort', 100),
+        amount:money(p.amount, 'Betrag'), payment:p.payment, reviewIssues:[], status:'available', reviewedAt:now, reviewedBy:user.id});
+      break;
+    }
     case "addOrder": {
       requireRole(user, "driver", "chef");
       const employeeId =
@@ -266,6 +304,7 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
     case "delivered": {
       requireRole(user, "driver", "chef");
       result = owned(lookup(s.orders, p.id), user);
+      if (!['open','delivered'].includes(result.status)) fail('Bitte die Bestellung zuerst einem Fahrer zuordnen.', 409);
       if (result.status !== "delivered") {
         result.status = "delivered";
         result.deliveredAt = now;

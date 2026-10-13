@@ -1,9 +1,9 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { createApp } from "./app.js";
-export async function fixture(t) {
+export async function fixture(t, options = {}) {
   const dir = await mkdtemp(`${tmpdir()}/jeffreyys-`);
-  const app = await createApp({ dataFile: `${dir}/db.json`, demo: true });
+  const app = await createApp({ ...options, dataFile: `${dir}/db.json`, demo: true });
   const server = app.listen(0, "127.0.0.1");
   await new Promise((r) => server.once("listening", r));
   t.after(async () => {

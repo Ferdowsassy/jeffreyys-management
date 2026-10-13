@@ -29,6 +29,7 @@ import "./style.css";
 import {ShiftCorrections} from "./shift-corrections";
 import { InstallApp } from "./install-app";
 import { useDriverLocation } from "./location-sharing";
+import {OrderQueue} from './order-queue';
 const DailyStatistics = lazy(() => import("./daily-statistics"));
 const LiveDriverMap = lazy(() => import("./driver-map"));
 
@@ -261,6 +262,7 @@ function Login({ onLogin, notify }) {
 }
 const chefNav = [
   ["Heute", LayoutDashboard],
+  ["Bestellungen", Truck],
   ["Plan", CalendarDays],
   ["Geld", Wallet],
   ["Analyse", ChartNoAxesCombined],
@@ -376,6 +378,7 @@ function App() {
           ]
         : [
             ["Schicht", Clock],
+            ["Bestellungen", ClipboardList],
             ["Tour", Truck],
             ["Belege", Receipt],
             ["Plan", CalendarDays],
@@ -417,6 +420,7 @@ function App() {
                 <Icon size={19} />
                 {label}
                 {label === "Zeiten" && user.role === "chef" && pendingCorrections > 0 && <span className="nav-count">{pendingCorrections}</span>}
+                {label === 'Bestellungen' && (data.availableOrders || []).length > 0 && <span className="nav-count">{data.availableOrders.length}</span>}
                 {label === "Aufgaben" && (
                   <span className="nav-count">
                     {data.tasks.filter((t) => !t.done).length}
@@ -491,7 +495,9 @@ function App() {
               <span>Kein Live-Betrieb</span>
             </div>
           )}
-          {current === "Meine Arbeitszeiten" ? (
+          {current === 'Bestellungen' ? (
+            <OrderQueue user={user} data={data} act={act} />
+          ) : current === "Meine Arbeitszeiten" ? (
             <><Title title="Meine Arbeitszeiten" subtitle="Schichten prüfen und fehlende Zeiten melden." /><ShiftCorrections user={user} data={data} act={act} /></>
           ) : current === "Statistik" ? (
             <Suspense fallback={<p>Statistik wird geladen …</p>}><DailyStatistics user={user} data={data} /></Suspense>

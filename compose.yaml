@@ -22,6 +22,8 @@ services:
       BOOTSTRAP_PIN_FILE: /run/secrets/bootstrap_pin
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      WINORDER_USERNAME: ${WINORDER_USERNAME:-}
+      WINORDER_PASSWORD: ${WINORDER_PASSWORD:-}
     secrets:
       - bootstrap_pin
     volumes:

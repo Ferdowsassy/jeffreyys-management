@@ -21,6 +21,7 @@
     "@tesseract.js-data/eng": "^1.0.0",
     "@vitejs/plugin-react": "^4.7.0",
     "express": "^5.1.0",
+    "fast-xml-parser": "5.11.2",
     "jsqr": "^1.4.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.468.0",

@@ -4,8 +4,11 @@ import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import { isAbsolute } from "node:path";
 import { databaseConfig } from "./mysql-store.js";
+import {findWinorderConfig} from './runtime-config.js';
 
 if (process.env.DB_CONFIG_FILE) process.loadEnvFile(process.env.DB_CONFIG_FILE);
+const winorderConfigFile = findWinorderConfig(import.meta.url);
+if (winorderConfigFile) process.loadEnvFile(winorderConfigFile);
 const database = databaseConfig();
 
 const production = process.env.NODE_ENV === "production";

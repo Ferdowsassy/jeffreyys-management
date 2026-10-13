@@ -79,6 +79,39 @@ AddType application/manifest+json .webmanifest
 
 Run `PWA_ORIGIN=https://jeffreys-burger.app node scripts/pwa-check.mjs` after deployment. This verifies manifest/icons, Chromium installability, worker control, offline fallback, reconnect, and absence of private/API data in worker caches. Only public offline assets are cached. Keep `/api`, SSE, sessions, and all writes online.
 
+## WinOrder receiver
+
+See [WINORDER.md](WINORDER.md) for restaurant settings and import behavior. The
+backend accepts authenticated deliveries at `/sendorder` and exposes the driver
+claim queue under **Bestellungen**. Set `WINORDER_CONFIG_FILE` to a mode-0600
+private env file with `WINORDER_USERNAME` and `WINORDER_PASSWORD`. Direct backend
+environment variables are also supported. Credentials are never frontend variables.
+
+For this Hostinger installation, the private receiver config is
+`/home/u678525276/domains/jeffreys-burger.app/hbuilds/config/winorder.env`; its path
+can be supplied through `SetEnv WINORDER_CONFIG_FILE` in `public_html/.htaccess`.
+In production the app also discovers this existing file automatically from
+Hostinger's `hbuilds/versions/<release>/nodejs/server` directory layout. Therefore
+a normal redeploy can replace `.htaccess` without losing the receiver credentials.
+Explicit `WINORDER_CONFIG_FILE` or direct credential variables take precedence.
+Keep the private `hbuilds/config/winorder.env` file and the existing MySQL settings;
+no credential change in WinOrder is needed. No schema migration is needed:
+imported orders occupy existing `jm_orders` records.
+
+The 2026-10-13 WinOrder release is staged under
+`hbuilds/versions/winorder-20261013-01a1367d/nodejs`, with `hbuilds/current` pointing
+to it. The previous release, database dump and hosting configuration are retained
+privately under `~/backups/jeffreyys-winorder-20261013-01a1367d`.
+Application rollback should preserve the live MySQL database; restoring a dump
+after new business activity would discard those writes.
+
+Local HTTP regression tests and the browser import/claim/release flow passed.
+Hostinger's SSH environment refuses loopback connections to temporary HTTP
+listeners, so the remote runtime check used isolated in-memory orders; actual
+receiver authentication and rejection of invalid payloads were verified through
+the public HTTPS endpoint without creating production orders. The first real
+send from the restaurant still needs to confirm WinOrder's forwarding behavior.
+
 ## Optional AI
 
 Receipt scanning needs no API key: the browser loads self-hosted OCR assets from `/ocr/`, reads the image locally, and presents editable fields for review before saving through the normal order API. `npm run build` generates the worker, WASM and language assets; keep them in the deployed `dist` directory. The first scan downloads these assets, so initial recognition can be slower on mobile. OCR can misread text: users must compare the draft with the original photo. The optional coach requires a backend `OPENAI_API_KEY`; `OPENAI_MODEL` defaults to `gpt-4o-mini`. Never place the key in a browser build or commit it to Git.

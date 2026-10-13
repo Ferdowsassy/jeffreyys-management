@@ -20,6 +20,7 @@ import EarningsWeek from "./earnings-week";
 import {dailyEarnings} from "../shared/daily-stats";
 import { scanReceipt } from "./receipt-ocr";
 import { summarizeItems } from "./order-items";
+import {WinOrderSettings} from './order-queue';
 const today = () => day(Date.now());
 const person = (data, id) =>
   data.employees.find((e) => e.id === id)?.name || "Unbekannt";
@@ -605,7 +606,7 @@ export function Management({ user, data, page, act, notify }) {
         </Panel>
       </>
     );
-  if (page === "Einstellungen") body = <StoreSettings data={data} act={act} notify={notify} />;
+  if (page === "Einstellungen") body = <><WinOrderSettings data={data} /><StoreSettings data={data} act={act} notify={notify} /></>;
   if (page === "Finanzen")
     body = (
       <Panel
@@ -1202,6 +1203,13 @@ export function Driver({ user, data, page, act, notify }) {
                     Zugestellt
                   </button>
                 </div>
+                {o.source === 'winorder' && <>
+                  {o.customerName && <p>{o.customerName}</p>}
+                  {o.customerPhone && <a className="secondary" href={'tel:'+o.customerPhone}>Kunden anrufen</a>}
+                  {o.deliveryNotes && <p className="order-notes">{o.deliveryNotes}</p>}
+                  {o.articleDescription && <details><summary>Bestellte Artikel</summary><p className="order-notes">{o.articleDescription}</p></details>}
+                  <button className="text-button" onClick={() => act('releaseOrder',{id:o.id}).catch(() => {})}>Zurück zu verfügbaren Bestellungen</button>
+                </>}
               </Panel>
             ))}
           </div>

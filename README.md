@@ -46,6 +46,10 @@ An offline launch shows a reconnect screen. Shifts, orders, sessions, customer i
 
 ## Commands
 
+WinOrder Professional deliveries can be received over authenticated HTTPS and
+claimed by clocked-in drivers under **Bestellungen**. See [WINORDER.md](WINORDER.md)
+for configuration and the one-way synchronization boundaries.
+
 - `npm run dev` — Vite development server
 - `npm run server` — API/server using the supplied environment
 - `npm start` — production entrypoint (`NODE_ENV=production`)
