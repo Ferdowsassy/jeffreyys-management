@@ -6,7 +6,7 @@ const messages = new Map([
   ['Invalid or unsupported WinOrder XML', 'Die XML-Daten sind ungültig oder enthalten nicht unterstützte Deklarationen.'],
   ['Invalid WinOrder XML', 'Die XML-Daten konnten nicht gelesen werden.'],
   ['Invalid WinOrder JSON', 'Die Daten sind kein gültiges JSON. Erwartet wird eine XML- oder JSON-Bestellung.'],
-  ['Expected WinOrder.OrderList', 'Die Bestellstruktur WinOrder → OrderList fehlt.'],
+  ['Expected WinOrder.OrderList', 'Die Bestellliste OrderList fehlt oder hat ein ungültiges Format.'],
   ['WinOrder batch must contain 1–100 orders', 'Die Bestellliste muss 1 bis 100 Bestellungen enthalten.'],
   ['Invalid WinOrder order', 'Ein Eintrag in der Bestellliste ist ungültig.'],
   ['WinOrder OrderID is required', 'Die Bestellnummer OrderID fehlt.'],

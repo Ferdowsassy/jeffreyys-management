@@ -26,6 +26,10 @@ POST with Basic authentication, a WinOrder EShop XML or JSON body, and a maximum
 body size of 1 MiB. Standard XML character encodings UTF-8, ISO-8859-1 and
 Windows-1252 are supported. DTDs and custom entities are rejected. Success is
 HTTP 200 with `{ "status": "success", "data": { ...counts }, "message": "OK" }`.
+XML uses the `WinOrder → OrderList` envelope. The documented JSON format starts
+directly with `OrderList`; previously supported JSON with an outer `WinOrder`
+object is also accepted. The receiver detects XML/JSON from the body, including
+when WinOrder forwarding omits the Content-Type header.
 Only acknowledge a transfer after the database transaction commits. A failed
 request must be retried from WinOrder; the receiver deduplicates stable source
 IDs. Authentication header behavior must be confirmed with a real WinOrder send.

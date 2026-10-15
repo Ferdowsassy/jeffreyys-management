@@ -30,6 +30,56 @@ test('WinOrder parser preserves identifiers, address, totals, notes and Berlin t
   assert.throws(() => parseWinorder(Buffer.from('<WinOrder><OrderList></WinOrder>')));
   assert.throws(() => winorderCredentials({WINORDER_USERNAME:'winorder',WINORDER_PASSWORD:'short'}));
 });
+
+// The official EShop specification's JSON example (pages 15–16) has OrderList
+// at the top level, unlike XML's WinOrder > OrderList envelope.
+function winorderJson(id='00042') {
+  return {OrderList:{CreateDateTime:'2026-01-12T18:00:00+01:00',Order:{
+    OrderID:id, StoreData:{StoreId:'1'},
+    Customer:{DeliveryAddress:{FirstName:'Test',LastName:'Kunde',Street:'Teststraße',HouseNo:'12',Zip:'80802',City:'München',PhoneNo:'089123456',AddAddress:'2. Stock'}},
+    ServerData:{CreateDateTime:'2026-01-12T18:00:00+01:00'},
+    AddInfo:{DeliverType:'Lieferung',PaymentType:'Barzahlung',Total:'25.50',Comment:'Bitte klingeln'},
+    ArticleList:{Article:[{ArticleName:'Burger & Pommes',Count:'1',Price:'25.50'}]},
+  }}};
+}
+
+test('documented top-level JSON OrderList supports single orders and batches without changing XML validation', () => {
+  const sample=winorderJson();
+  const [order]=parseWinorder(Buffer.from(JSON.stringify(sample)));
+  assert.equal(order.externalOrderId,'00042'); assert.equal(order.externalKey,'1:2026-01-12:00042');
+  assert.equal(order.address,'Teststraße 12'); assert.equal(order.amount,25.5); assert.equal(order.payment,'cash');
+  assert.equal(order.articleDescription,'1 · Burger & Pommes'); assert.deepEqual(order.reviewIssues,[]);
+  assert.deepEqual(parseWinorder(Buffer.from(JSON.stringify({WinOrder:sample}))),[order]);
+  sample.OrderList.Order=[sample.OrderList.Order,winorderJson('00043').OrderList.Order];
+  assert.deepEqual(parseWinorder(Buffer.from(JSON.stringify(sample))).map(o=>o.externalOrderId),['00042','00043']);
+  for(const invalid of [{OrderList:[]},{OrderList:'invalid'},{OrderList:null},{Order:sample.OrderList.Order}])
+    assert.throws(()=>parseWinorder(Buffer.from(JSON.stringify(invalid))));
+  assert.throws(()=>parseWinorder(Buffer.from('<OrderList><Order><OrderID>42</OrderID></Order></OrderList>')));
+});
+
+test('WinOrder forwarding JSON with no content type imports once and shares deduplication with XML', async t => {
+  const {base,request,login,app}=await fixture(t,{winorder:credentials});
+  const sample=winorderJson();
+  async function send() {
+    // A Buffer prevents fetch from adding its own Content-Type for a string.
+    const response=await fetch(base+'/sendorder',{method:'POST',headers:{authorization:auth},body:Buffer.from(JSON.stringify(sample))});
+    return {status:response.status,body:await response.json()};
+  }
+  const result=await send();
+  assert.equal(result.status,200); assert.equal(result.body.data.imported,1);
+  assert.equal((await send()).body.data.duplicates,1);
+  const xml=winorderSample('00042',{timestamp:sample.OrderList.CreateDateTime}).replace('<PaymentType>Bar</PaymentType>','<PaymentType>Barzahlung</PaymentType>');
+  assert.equal((await sender(base)(xml)).body.data.duplicates,1);
+  assert.equal(app.locals.store.read().orders.filter(o=>o.source==='winorder').length,1);
+  const chef=await login('alex','1234');
+  const diagnostics=(await request('/api/integrations/winorder',undefined,chef)).body;
+  assert.equal(diagnostics.attempts[1].status,200); assert.equal(diagnostics.attempts[1].contentType,'missing');
+  assert.equal(diagnostics.attempts[1].authenticated,true); assert.ok(diagnostics.lastReceivedAt);
+  const driver=await login('leo','3456');
+  const queue=(await request('/api/state',undefined,driver)).body.availableOrders;
+  assert.equal(queue.length,1); assert.equal(queue[0].orderNumber,'00042');
+  assert.equal((await request('/api/action',{type:'claimOrder',id:queue[0].id},driver)).status,200);
+});
 test('authenticated WinOrder imports persist once, expose a safe shared queue and require an active shift to claim', async t => {
   const {base, request, login, app, dir} = await fixture(t,{winorder:credentials});
   const send = sender(base), xml = winorderSample();

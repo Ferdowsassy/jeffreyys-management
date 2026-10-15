@@ -82,8 +82,9 @@ function decode(body) {
 export function parseWinorder(body, now = new Date().toISOString()) {
   if (!Buffer.isBuffer(body) || !body.length || body.length > 1048576) fail('Supply a WinOrder XML or JSON order');
   const text = decode(body).trim();
+  const xml = text.startsWith('<');
   let document;
-  if (text.startsWith('<')) {
+  if (xml) {
     // No document types, external entities or custom entity expansion are accepted.
     if (/<!DOCTYPE|<!ENTITY/i.test(text) || XMLValidator.validate(text) !== true) fail('Invalid or unsupported WinOrder XML');
     try { document = new XMLParser({parseTagValue:false, maxNestedTags:30}).parse(text); }
@@ -91,7 +92,9 @@ export function parseWinorder(body, now = new Date().toISOString()) {
   } else {
     try { document = JSON.parse(text); } catch { fail('Invalid WinOrder JSON'); }
   }
-  const root = document?.WinOrder?.OrderList;
+  // WinOrder's documented JSON omits the <WinOrder> XML envelope.
+  // Preserve the previously accepted wrapped JSON for existing senders.
+  const root = xml ? document?.WinOrder?.OrderList : document?.OrderList ?? document?.WinOrder?.OrderList;
   if (!root || typeof root !== 'object' || Array.isArray(root)) fail('Expected WinOrder.OrderList');
   const orders = list(root.Order);
   if (!orders.length || orders.length > 100) fail('WinOrder batch must contain 1–100 orders');
