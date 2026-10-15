@@ -1,5 +1,17 @@
 const CACHE = 'jeffreyys-offline-v1';
 const PUBLIC_FILES = ['/offline.html', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/maskable-512.png', '/icons/apple-touch-icon.png'];
+self.addEventListener('push',event=>{
+  let payload={};try{payload=event.data?.json() || {};}catch{}
+  event.waitUntil(self.registration.showNotification('Jeffreyys',{body:payload.body || 'Es gibt Neuigkeiten in deinem Workspace.',icon:'/icons/icon-192.png',tag:'jeffreyys-update',data:{url:'/'}}));
+});
+self.addEventListener('notificationclick',event=>{
+  event.notification.close();
+  event.waitUntil(self.clients.matchAll({type:'window',includeUncontrolled:true}).then(async clients=>{
+    const client=clients.find(c=>new URL(c.url).origin===self.location.origin);
+    if(client)return client.focus();
+    return self.clients.openWindow('/');
+  }));
+});
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(PUBLIC_FILES)).then(() => self.skipWaiting()));
 });

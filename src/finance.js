@@ -1,4 +1,4 @@
-import { payroll as calculatePayroll } from "../shared/payroll.js";
+import {monthlyPayroll} from '../shared/accounting.js';
 export const euro = (n) =>
   new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(
     Number(n) || 0,
@@ -19,14 +19,5 @@ export function formatHours(value) {
 export const sum = (xs, fn) => xs.reduce((s, x) => s + (Number(fn(x)) || 0), 0);
 export const round = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
 export function payroll(e, data, month, now = Date.now()) {
-  const inMonth = (d) => day(d).startsWith(month);
-  const scoped = {
-    employees: [e],
-    shifts: data.shifts.filter((s) => inMonth(s.start)),
-    orders: data.orders.filter((o) => inMonth(o.createdAt)),
-    handoffs: data.handoffs.filter((h) => inMonth(h.createdAt)),
-  };
-  const p = calculatePayroll(scoped, now)[0];
-  return { hours: p.hours, wages: p.hourlyPay, fees: p.deliveryPay,
-    cash: p.collectedCash, returned: p.returnedCash, retained: p.retainedCash, payout: p.payout };
+  return monthlyPayroll(e,data,month,now);
 }

@@ -30,6 +30,8 @@ import {ShiftCorrections} from "./shift-corrections";
 import { InstallApp } from "./install-app";
 import { useDriverLocation } from "./location-sharing";
 import {OrderQueue} from './order-queue';
+import {AccountSettings,passkeyLogin} from './workspace-access';
+import {periodStats} from '../shared/accounting';
 const DailyStatistics = lazy(() => import("./daily-statistics"));
 const LiveDriverMap = lazy(() => import("./driver-map"));
 
@@ -77,7 +79,7 @@ export function Panel({ title, subtitle, action, children, className = "" }) {
     </section>
   );
 }
-export function Form({ fields, onSubmit, submit = "Speichern", initial = {}, children }) {
+export function Form({ fields, onSubmit, submit = "Speichern", initial = {}, children, disabled = false }) {
   const [busy, setBusy] = useState(false);
   return (
     <form
@@ -128,7 +130,7 @@ export function Form({ fields, onSubmit, submit = "Speichern", initial = {}, chi
         </label>
       ))}
       {children}
-      <button className="primary" disabled={busy}>
+      <button className="primary" disabled={busy || disabled}>
         {busy ? "Wird gespeichert …" : submit}
       </button>
     </form>
@@ -180,7 +182,7 @@ function Login({ onLogin, notify }) {
           {selected
             ? demoMode
               ? "Deine Demo-PIN, dann geht’s los."
-              : "Deine 8–12-stellige PIN, dann geht’s los."
+              : "Deine PIN (4–12 Ziffern), dann geht’s los."
             : "Wähle deinen Namen, um loszulegen."}
         </p>
         {!selected ? (
@@ -230,6 +232,9 @@ function Login({ onLogin, notify }) {
             <button className="primary full" disabled={busy}>
               Anmelden <ArrowUpRight size={18} />
             </button>
+            {window.PublicKeyCredential && <button type="button" className="secondary full" disabled={busy} onClick={async()=>{
+              setBusy(true);try{await passkeyLogin(selected.id);await onLogin();}catch(e){notify(e.name==='NotAllowedError'?'Anmeldung abgebrochen.':e.message);}finally{setBusy(false);}
+            }}>Mit Face ID / Passkey anmelden</button>}
             <button
               type="button"
               className="text-button full"
@@ -267,7 +272,6 @@ const chefNav = [
   ["Geld", Wallet],
   ["Analyse", ChartNoAxesCombined],
   ["Statistik", ChartNoAxesCombined],
-  ["Kasse", Receipt],
   ["Kunden", Users],
   ["Zeiten", Clock],
   ["Team", Users],
@@ -375,6 +379,7 @@ function App() {
             ["Mein Verdienst", Wallet],
             ["Meine Arbeitszeiten", Clock],
             ["Aufgaben", ClipboardList],
+            ["Einstellungen", Settings],
           ]
         : [
             ["Schicht", Clock],
@@ -385,13 +390,14 @@ function App() {
             ["Verdienst", Wallet],
             ["Meine Arbeitszeiten", Clock],
             ["Statistik", ChartNoAxesCombined],
+            ["Einstellungen", Settings],
           ];
   const current = nav.some((n) => n[0] === page) ? page : nav[0][0];
   const pendingCorrections = (data.shiftRequests || []).filter(r => r.status === "pending").length;
   const demo =
     data.orders.some((o) => o.demo) || data.employees.some((e) => e.demo);
   return (
-    <div className="app">
+    <div className={'app role-'+user.role}>
       <aside className={mobile ? "sidebar open" : "sidebar"}>
         <a
           className="brand"
@@ -444,6 +450,11 @@ function App() {
               await api("logout", {});
               setUser(null);
               setData(null);
+              try {
+                const registration=await navigator.serviceWorker?.getRegistration();
+                const subscription=await registration?.pushManager?.getSubscription();
+                await subscription?.unsubscribe();
+              } catch {}
             }}
           >
             <LogOut size={18} />
@@ -495,7 +506,7 @@ function App() {
               <span>Kein Live-Betrieb</span>
             </div>
           )}
-          {current === 'Bestellungen' ? (
+          {current==='Einstellungen' && user.role!=='chef' ? <><Title title="Dein Zugang" subtitle="Anmeldung und Benachrichtigungen auf diesem Gerät." /><AccountSettings user={user} notify={notify} /></> : current === 'Bestellungen' ? (
             <OrderQueue user={user} data={data} act={act} />
           ) : current === "Meine Arbeitszeiten" ? (
             <><Title title="Meine Arbeitszeiten" subtitle="Schichten prüfen und fehlende Zeiten melden." /><ShiftCorrections user={user} data={data} act={act} /></>
@@ -676,27 +687,10 @@ export function Drivers({ data }) {
   );
 }
 function Dashboard({ data, go, act }) {
-  const today = day(Date.now()),
-    orders = data.orders.filter((o) => day(o.createdAt) === today),
-    revenue = sum(orders, (o) => o.amount),
-    cash = sum(
-      orders.filter((o) => o.payment === "cash"),
-      (o) => o.amount,
-    ),
-    wages =
-      sum(
-        data.shifts.filter((s) => day(s.start) === today),
-        (s) => hours(s) * s.hourlyRate,
-      ) + sum(orders, (o) => o.deliveryFee),
-    food = (revenue * (Number(data.settings.foodCostPercent) || 0)) / 100,
-    fixed = Number(data.settings.fixedCosts) || 0,
-    days = new Date(
-      new Date().getFullYear(),
-      new Date().getMonth() + 1,
-      0,
-    ).getDate(),
-    profit = revenue - wages - food - fixed / days,
-    ratio = revenue ? (wages / revenue) * 100 : 0;
+  const today = day(Date.now()), summary=periodStats(data,{role:'chef'},'day',today),
+    orders=summary.orders,revenue=summary.revenue,cash=summary.cash,wages=summary.wages,
+    food=summary.estimatedFood,fixed=summary.estimatedFixed,profit=summary.profit,
+    ratio=revenue?wages/revenue*100:0;
   const buckets = Array.from({ length: 12 }, (_, i) => ({
     h: i + 11,
     total: sum(
@@ -834,8 +828,9 @@ function Dashboard({ data, go, act }) {
             </div>
             <div>
               <span>Fixkosten anteilig</span>
-              <span>− {euro(fixed / days)}</span>
+              <span>− {euro(fixed)}</span>
             </div>
+            <div><span>Erfasste Ausgaben</span><span>− {euro(summary.actual)}</span></div>
             <div className="cost-total">
               <b>{fixed ? "Gewinn (geschätzt)" : "Deckungsbeitrag"}</b>
               <strong>{euro(profit)}</strong>
@@ -862,4 +857,6 @@ function Dashboard({ data, go, act }) {
     </>
   );
 }
-createRoot(document.getElementById("root")).render(<App />);
+const root=import.meta.hot?.data.root || createRoot(document.getElementById('root'));
+if(import.meta.hot)import.meta.hot.data.root=root;
+root.render(<App />);

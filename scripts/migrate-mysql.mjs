@@ -9,6 +9,8 @@ const source = process.argv[2];
 if (!source || !isAbsolute(source)) throw new Error('Usage: node scripts/migrate-mysql.mjs /absolute/path/to/state.json (stop the app and back up first)');
 const initialState = JSON.parse(await readFile(source, 'utf8'));
 initialState.shiftRequests ??= [];
+initialState.expenses ??= [];
+initialState.salaryPayments ??= [];
 const store = await createMysqlStore(config, {initialState});
 try {
   const migrated = store.read();

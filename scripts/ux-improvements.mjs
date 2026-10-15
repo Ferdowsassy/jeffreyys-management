@@ -23,7 +23,7 @@ const page=await context.newPage(), errors=[];
 page.on('pageerror',e=>errors.push(e.message));
 async function nav(name) {if(await page.getByRole('button',{name:'Menü',exact:true}).isVisible())await page.getByRole('button',{name:'Menü',exact:true}).click();await page.locator('.sidebar').getByRole('button',{name,exact:true}).click();}
 async function login(name,pin) {
-  await page.goto(base);await page.getByRole('button',{name:new RegExp(name)}).click();await page.getByLabel('PIN',{exact:true}).fill(pin);await page.getByRole('button',{name:'Anmelden'}).click();await page.locator('.sidebar').waitFor();
+  await page.goto(base);await page.getByRole('button',{name:new RegExp(name)}).click();await page.getByLabel('PIN',{exact:true}).fill(pin);await page.getByRole('button',{name:'Anmelden',exact:true}).click();await page.locator('.sidebar').waitFor();
 }
 try {
   for(const [name,pin,earnings] of [['Alex','1234','Geld'],['Samira','2345','Mein Verdienst'],['Leo','3456','Verdienst']]) {

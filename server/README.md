@@ -20,7 +20,7 @@ First run seeds clearly marked demo records with Munich-calendar dates and relat
 | leo | Leo | driver | 3456 |
 | mia | Mia | driver | 4567 |
 
-These are **public demo credentials**, not production secrets. Production starts with demo mode disabled, requires an explicit bootstrap owner, and accepts 8–12 digit PINs only. PINs are persisted as salted scrypt hashes and never returned by an endpoint. Never use demo mode with real information.
+These are **public demo credentials**, not production secrets. Production starts with demo mode disabled, requires an explicit bootstrap owner, and accepts 4–12 digit employee PINs; the initial bootstrap owner uses 8–12 digits. PINs are persisted as salted scrypt hashes and never returned by an endpoint. Never use demo mode with real information.
 
 Production serves the built client and API only behind a configured HTTPS proxy; direct non-health HTTP requests receive 426. Sessions are random 256-bit tokens in an HttpOnly, Secure, SameSite=Strict cookie in production, with a 12-hour expiry. They are memory-only and disappear on restart. Login is limited to 20 attempts per IP per 15 minutes; AI to 10 calls per employee per minute. Foreign POST origins are rejected, and role/active status is rechecked on every request and queued transaction.
 
@@ -30,7 +30,7 @@ All JSON errors: `{ "error": "Human-readable explanation" }`. Validation 400, un
 
 - `GET /api/session` → `{user:null}` or `{user:Employee}`. Kitchen sessions exclude financial fields.
 - `GET /api/people` → `{demo:boolean,people:[{id,name,role}]}` for active employees; public.
-- `POST /api/login` `{id,pin}` → `{user}` and session cookie. PIN is a string of 4–12 digits in demo mode and 8–12 digits in production.
+- `POST /api/login` `{id,pin}` → `{user}` and session cookie. PIN is a string of 4–12 digits.
 - `POST /api/logout` `{}` → `{ok:true}`; revokes session and closes its SSE streams.
 - `GET /api/state` → state described below.
 - `GET /api/events` → authenticated SSE; `ready` and `invalidate` named events, both with `{}` data. Subscribe with `eventSource.addEventListener('invalidate', refetch)`. Heartbeats every 15 seconds; no private records are streamed. Sessions are rechecked on heartbeat/invalidation.

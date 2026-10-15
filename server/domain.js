@@ -2,6 +2,8 @@ import {driverColor, driverColors} from "../shared/return-trip.js";
 import { payroll } from "../shared/payroll.js";
 import { randomUUID } from "node:crypto";
 import { safeEmployee, hashPin, seed } from "./store.js";
+import {absenceNames} from '../shared/schedule.js';
+import {monthlyPayroll} from '../shared/accounting.js';
 export const cents = (value) => Math.round(value * 100);
 const euros = (value) => Math.round(value) / 100;
 export function fail(message, status = 400) {
@@ -94,9 +96,14 @@ export function filterState(state, user) {
   s.settings.receiptMapsConfigured=!!(s.settings.googleMapsServerKey || process.env.GOOGLE_MAPS_SERVER_KEY);
   delete s.settings.googleMapsServerKey;
   delete s.settings.routingApiKey;
+  delete s.settings.webPushVapid;
   s.shiftRequests = (s.shiftRequests || []).filter(r => user.role === "chef" || r.employeeId === user.id);
+  s.expenses = (s.expenses || []).map(({attachment,...expense})=>({...expense,hasAttachment:!!attachment}));
+  s.salaryPayments = s.salaryPayments || [];
   if (user.role === "chef") return s;
   s.audit = [];
+  s.expenses = [];
+  s.salaryPayments = s.salaryPayments.filter(p=>p.employeeId===user.id);
   s.settings = { longShiftHours: s.settings.longShiftHours, store:s.settings.store, routingConfigured:s.settings.routingConfigured, receiptMapsConfigured:s.settings.receiptMapsConfigured };
   if (user.role === "driver") {
     s.availableOrders = s.availableOrders.filter(o => o.status === 'available').map(
@@ -203,17 +210,90 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
     case "clockOut": {
       const shift = s.shifts.find((x) => x.employeeId === user.id && !x.end);
       if (!shift) fail("No active shift", 409);
+      const end = p.end === undefined ? now : timestamp(p.end);
+      validateShiftRange(s,user.id,shift.id,shift.start,end);
+      if (s.orders.some(o=>o.shiftId===shift.id && Date.parse(o.deliveredAt || o.createdAt)>Date.parse(end)))
+        fail('Das Schichtende liegt vor einer erfassten Bestellung oder Zustellung. Bitte einen späteren Zeitpunkt wählen.',409);
       for (const order of s.orders.filter(o => o.employeeId === user.id && o.status === "open")) {
         order.status = "delivered";
-        order.deliveredAt = now;
+        order.deliveredAt = end;
         order.completionSource = "clockOut";
       }
-      shift.end = now;
+      shift.end = end;
+      shift.clockedOutAt = now;
       delete employee().location;
       delete employee().returnTrip;
       result = createHandoff(s, shift, false, now, true);
       break;
     }
+    case 'assignOrder': {
+      requireRole(user,'chef');
+      result=lookup(s.orders,p.id);
+      if (result.status!=='open') fail('Nur offene Bestellungen können neu zugeordnet werden.',409);
+      const driver=lookup(s.employees,p.employeeId);
+      const shift=s.shifts.find(x=>x.employeeId===driver.id && !x.end);
+      if (!driver.active || driver.role!=='driver' || !shift) fail('Bitte einen Fahrer im Dienst wählen.',409);
+      if (s.handoffs.some(h=>h.shiftId===result.shiftId)) fail('Diese Bestellung gehört bereits zu einer Bargeldabrechnung.',409);
+      Object.assign(result,{employeeId:driver.id,shiftId:shift.id,assignedAt:now,assignedBy:user.id});
+      break;
+    }
+    case 'recordSalaryPayment': {
+      requireRole(user,'chef');
+      const e=lookup(s.employees,p.employeeId), month=text(p.month,'Monat',7);
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || month>today().slice(0,7)) fail('Ungültiger Abrechnungsmonat.');
+      const requestId=text(p.requestId,'Zahlungs-ID',80);
+      s.salaryPayments ??= [];
+      const existing=s.salaryPayments.find(x=>x.requestId===requestId);
+      if(existing) {
+        if(existing.employeeId!==e.id || existing.month!==month || existing.amount!==p.amount || existing.method!==p.method)fail('Die Zahlungs-ID wurde bereits für eine andere Zahlung verwendet.',409);
+        result=existing;break;
+      }
+      const amount=money(p.amount,'Auszahlungsbetrag');
+      if(amount<=0 || amount>monthlyPayroll(e,s,month).balance) fail('Der Betrag muss positiv sein und darf den offenen Auszahlungsbetrag nicht übersteigen.',409);
+      if(!['cash','transfer'].includes(p.method)) fail('Bitte die Zahlungsart wählen.');
+      result={id,requestId,employeeId:e.id,month,amount,method:p.method,note:p.note ? text(p.note,'Notiz',500):'',createdAt:now,recordedBy:user.id,demo:false};
+      s.salaryPayments.push(result);
+      break;
+    }
+    case 'saveExpense': {
+      requireRole(user,'chef');
+      const existing=p.id ? lookup(s.expenses || [],p.id):null;
+      if(!['food','fuel','commission','fixed','other'].includes(p.category)) fail('Ungültige Ausgabenkategorie.');
+      let attachment=existing?.attachment;
+      if(p.attachment!==undefined) {
+        const a=p.attachment;
+        if(a===null) attachment=undefined;
+        else {
+          if(!a || !['application/pdf','image/jpeg','image/png'].includes(a.type) || typeof a.data!=='string' || !/^[A-Za-z0-9+/]*={0,2}$/.test(a.data) || Buffer.byteLength(a.data,'base64')>2*1024*1024) fail('Rechnung als PDF, JPG oder PNG mit maximal 2 MB hochladen.');
+          attachment={name:text(a.name,'Dateiname',180),type:a.type,data:a.data};
+        }
+      }
+      const date=day(p.date);
+      if(date>today()) fail('Ausgaben dürfen nicht in der Zukunft liegen.');
+      result={id:existing?.id || id,date,category:p.category,description:text(p.description,'Beschreibung',200),amount:money(p.amount,'Betrag'),attachment,createdAt:existing?.createdAt || now,updatedAt:now,demo:false};
+      s.expenses ??= [];
+      if(existing) Object.assign(existing,result);else s.expenses.push(result);
+      result={...result,attachment:undefined,hasAttachment:!!attachment};
+      break;
+    }
+    case 'archiveEmployee': {
+      requireRole(user,'chef');
+      const e=lookup(s.employees,p.id);
+      if(e.id===user.id) fail('Du kannst deinen eigenen Zugang nicht entfernen.');
+      if(s.shifts.some(x=>x.employeeId===e.id && !x.end) || s.orders.some(x=>x.employeeId===e.id && x.status==='open')) fail('Bitte zuerst die laufende Schicht und offene Lieferungen abschließen.',409);
+      if(e.role==='chef' && e.active && s.employees.filter(x=>x.role==='chef' && x.active).length<=1) fail('Mindestens ein aktiver Chef muss erhalten bleiben.');
+      e.active=false;e.archived=true;delete e.passkeys;delete e.pushSubscriptions;
+      break;
+    }
+    case 'restoreEmployee':
+      requireRole(user,'chef');
+      Object.assign(lookup(s.employees,p.id),{active:true,archived:false});
+      break;
+    case 'deleteZone':
+      requireRole(user,'chef');
+      lookup(s.zones,p.id);
+      s.zones=s.zones.filter(z=>z.id!==p.id);
+      break;
     case "claimOrder": {
       requireRole(user, 'driver', 'chef');
       result = lookup(s.orders, p.id);
@@ -425,10 +505,11 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
       requireRole(user, "chef");
       const e = lookup(s.employees, p.employeeId);
       if (!e.active) fail("Inactive employee");
-      const date = day(p.date),
-        start = time(p.start),
-        end = time(p.end);
-      if (start === end) fail("Shift cannot have zero duration");
+      const date = day(p.date), kind = p.kind ?? 'shift';
+      if (kind !== 'shift' && !Object.hasOwn(absenceNames,kind)) fail('Invalid schedule type');
+      const start = kind === 'shift' ? time(p.start) : null;
+      const end = kind === 'shift' ? time(p.end) : null;
+      if (kind === 'shift' && start === end) fail("Shift cannot have zero duration");
       const atDate = s.schedule.find(
         (x) => x.employeeId === e.id && x.date === date,
       );
@@ -440,10 +521,25 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
         date,
         start,
         end,
+        kind,
+        templateName:kind === 'shift' && p.templateName ? text(p.templateName,'Vorlagenname',60) : null,
         demo: false,
       };
       if (existing) Object.assign(existing, result);
       else s.schedule.push(result);
+      break;
+    }
+    case "saveShiftTemplates": {
+      requireRole(user,'chef');
+      if (!Array.isArray(p.templates) || p.templates.length < 1 || p.templates.length > 12) fail('Bitte 1–12 Schichtvorlagen angeben.');
+      const ids=new Set();
+      s.settings.shiftTemplates=p.templates.map(template => {
+        if (!template || typeof template !== 'object') fail('Invalid shift template');
+        const templateId=text(template.id,'Vorlagen-ID',80), start=time(template.start), end=time(template.end);
+        if (ids.has(templateId) || start === end) fail('Vorlagen benötigen eindeutige IDs und unterschiedliche Start- und Endzeiten.');
+        ids.add(templateId);
+        return {id:templateId,name:text(template.name,'Vorlagenname',60),start,end};
+      });
       break;
     }
     case "deleteSchedule": {

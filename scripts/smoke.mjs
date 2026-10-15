@@ -9,7 +9,7 @@ const people=await (await context.request.get('http://127.0.0.1:5173/api/people'
 async function login(name,pin){const employee=people.people.find(p=>p.name===name);assert(employee);const response=await context.request.post('http://127.0.0.1:5173/api/login',{data:{id:employee.id,pin}});assert.equal(response.status(),200);await page.goto('http://127.0.0.1:5173');await page.locator('.sidebar').waitFor();}
 try{
 await login('Alex','1234');
-for(const label of ['Heute','Plan','Geld','Analyse','Kasse','Kunden','Zeiten','Team','Gebiete','Aufgaben','Finanzen','Daten']){await page.locator('nav button').filter({hasText:new RegExp('^'+label+'(?:\\d+)?$')}).click();await page.locator('h1').waitFor();assert((await page.locator('h1').innerText()).length>0);console.log('Chef page OK:',label);}
+for(const label of ['Heute','Plan','Geld','Analyse','Statistik','Kunden','Zeiten','Team','Gebiete','Aufgaben','Finanzen','Daten']){await page.locator('nav button').filter({hasText:new RegExp('^'+label+'(?:\\d+)?$')}).click();await page.locator('h1').waitFor();assert((await page.locator('h1').innerText()).length>0);console.log('Chef page OK:',label);}
 await page.locator('nav button').filter({hasText:'Heute'}).click();await page.screenshot({path:'dashboard-desktop.png',fullPage:true});
 const task='Browserprüfung '+Date.now();await page.getByLabel('Neue Aufgabe').fill(task);await page.getByRole('button',{name:'Hinzufügen',exact:true}).click();await page.getByRole('button').filter({hasText:task}).waitFor();
 const state=await(await context.request.get('http://127.0.0.1:5173/api/state')).json();assert(state.tasks.some(t=>t.text===task));console.log('Task persisted/read-back OK');

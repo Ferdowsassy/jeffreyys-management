@@ -62,7 +62,7 @@ for configuration and the one-way synchronization boundaries.
 
 ## Security defaults
 
-Production refuses to start unless it has an HTTPS `APP_ORIGIN`, secure cookies, demo mode disabled, complete MySQL credentials (or an explicit absolute `DATA_FILE` for legacy deployments), and an explicit initial owner name/PIN when creating a new store. Production PINs are 8–12 digits. The bootstrap PIN is read from a file rather than an environment variable. Session cookies are HttpOnly, Secure, and SameSite=Strict.
+Production refuses to start unless it has an HTTPS `APP_ORIGIN`, secure cookies, demo mode disabled, complete MySQL credentials (or an explicit absolute `DATA_FILE` for legacy deployments), and an explicit initial owner name/PIN when creating a new store. Employee PINs are 4–12 digits; the initial bootstrap owner PIN remains 8–12 digits. The bootstrap PIN is read from a file rather than an environment variable. Session cookies are HttpOnly, Secure, and SameSite=Strict.
 
 Receipt scanning runs on the device using self-hosted Tesseract OCR and deterministic parsing. It extracts a draft for review; photos are never uploaded by the scanner. German and English OCR assets are generated during `npm run build`. The optional coach requires a backend `OPENAI_API_KEY`.
 
@@ -87,3 +87,11 @@ Receipt scanning recognizes the original register layout, Uber Eats invoice copi
 QR decoding and OCR run on the device; receipt photos are not uploaded. Google Maps QR codes with a full written postal address populate the address directly. Short Maps links are resolved through an authenticated endpoint which permits only Google Maps hosts and validates every redirect. Fiscal/TSE codes and coordinate-only targets never become postal addresses. A QR containing only a Google place ID requires a Google Places API (New) key: the chef can save it under **Einstellungen → QR-Adressen auf Belegen**, or the deployment can supply `GOOGLE_MAPS_SERVER_KEY`. The key stays on the server. Only the QR URL/place ID is used for address resolution; Google Places requests use the `formattedAddress` field. If the QR cannot be decoded or resolved, the scanner uses the printed address and shows missing fields for manual review. The first attached sample uses a place ID, so its address lookup needs this configuration. The second photo has an unreadable QR and ambiguous order-number characters; its printed delivery address, total and payment can be read, and the identifier is flagged for review.
 
 `node scripts/ux-improvements.mjs` checks weekly/day navigation, role scope, dedicated time records, mobile width and receipt controls. `node scripts/receipt-qr-check.mjs /path/to/receipt.jpg` diagnoses QR readability without storing the image. The OCR check accepts `OCR_RECEIPT_FILE` and `OCR_EXPECTED_JSON_FILE` for local photo fixtures; optional `OCR_TEXT_FILE` writes diagnostic text locally.
+
+## October operations update
+
+See [the implementation checklist](CHANGELOG-2026-10.md) for the changes from the two handwritten notes. Monthly payroll now includes retained cash, recorded salary payments and outstanding balances, with PDF exports available to each employee for their own records. Finanzen stores dated expenses and invoice attachments; the production adapter adds `jm_expenses` and `jm_salaryPayments` automatically.
+
+Passkeys use [SimpleWebAuthn](https://simplewebauthn.dev/docs/packages/server) and require user verification. Each employee registers their own passkey under Einstellungen after confirming their PIN. Real devices require HTTPS (localhost is supported for development); use one stable origin because passkeys belong to its hostname.
+
+Web Push uses the existing service worker. Each employee opts in under Einstellungen. VAPID keys are generated once and persisted in server-only settings; preserve them in server/database backups. Set `VAPID_SUBJECT` to a public HTTPS contact URL or `mailto:` contact for your deployment. Push delivery requires outbound HTTPS to browser push services. Notifications contain a generic event message only. See the [web-push library](https://github.com/web-push-libs/web-push) for transport details.

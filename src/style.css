@@ -1634,3 +1634,52 @@ button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visibl
 .order-queue-card > .text-button { margin: 0 22px 18px; }
 .winorder-details { display: grid; gap: 8px; }
 .winorder-details dd { margin: 0 0 10px; overflow-wrap: anywhere; font-weight: 600; }
+
+/* Operations update: readable monthly accounts, planning and touch controls. */
+.period-picker { flex-wrap: wrap; gap: 10px; }
+.period-picker label, .account-form label, .clock-out label { display: grid; gap: 7px; }
+.period-picker button { min-width: 44px; min-height: 44px; }
+.total-row td { font-weight: 700; background: #f2f5ef; }
+.time-month { padding: 22px; min-width: 0; }
+.time-month h3 { margin-bottom: 18px; }
+.month-bars { display: flex; align-items: end; gap: 6px; min-height: 185px; overflow-x: auto; padding: 16px 0; }
+.month-bars > div { flex: 1; min-width: 16px; display: flex; flex-direction: column; gap: 9px; align-items: center; }
+.month-bars > div > span { display: block; width: 75%; background: var(--orange); border-radius: 4px 4px 0 0; }
+.month-bars small { font-size: 10px; }
+.revenue-line { display: block; width: 100%; min-height: 180px; margin: 20px 0; overflow: visible; }
+.revenue-line text { font-size: 12px; fill: var(--muted); }
+.panel > .daily-stat-grid, .panel > .revenue-line, .panel > details, .panel > .account-form { margin: 20px 23px; width: auto; }
+.panel > .revenue-line { width: calc(100% - 46px); }
+.panel > p, .panel > label, .panel > .secondary { margin: 16px 23px; }
+.panel > label { display: grid; gap: 8px; }
+.account-form { display: flex; align-items: end; flex-wrap: wrap; gap: 16px; }
+.clock-out { display: flex; flex-direction: column; gap: 10px; max-width: 400px; }
+.clock-out form { display: grid; gap: 12px; }
+.clock-out p { font-size: 12px; color: var(--muted); }
+.shift-editor-body { padding: 0 23px 23px; display: grid; gap: 18px; }
+.shift-editor-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
+.shift-editor-fields label, .template-edit-row label { display: grid; gap: 6px; }
+.shift-template-list { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; }
+.shift-template { text-align: left; background: #f2f5ef; border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 8px; }
+.shift-template:hover { border-color: var(--orange); }
+.shift-absence-options { display: flex; flex-wrap: wrap; gap: 10px; }
+.shift-custom { border: 1px solid var(--line); padding: 16px; display: grid; gap: 14px; border-radius: 8px; }
+.template-edit-row { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 12px; align-items: end; }
+.role-driver .primary, .role-driver .secondary, .role-driver .text-button, .role-driver .file-button, .role-driver .nav-item { min-height: 52px; padding-block: 14px; }
+.role-driver .quick-actions, .role-driver .delivery-grid .row { gap: 14px; }
+.role-driver .delivery-grid .primary { flex: 1; font-size: 17px; }
+.role-driver input, .role-driver select { min-height: 48px; font-size: 16px; }
+@media(max-width:600px) {
+  .period-picker { width: 100%; }
+  .toolbar { flex-wrap: wrap; }
+  .shift-template-list, .shift-editor-fields, .template-edit-row { grid-template-columns: 1fr; }
+  .shift-editor-body, .time-month { padding: 16px; }
+  .row { flex-wrap: wrap; }
+  .daily-stat-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .daily-stat { min-width: 0; padding: 14px; }
+  .daily-stat strong { font-size: 20px; overflow-wrap: anywhere; }
+  .account-form { align-items: stretch; }
+  .account-form label, .account-form button { width: 100%; }
+  .role-driver .quick-actions > *, .role-driver .delivery-grid .row > * { width: 100%; justify-content: center; }
+}
+.schedule-shift small { display: block; margin-top: 5px; font-size: 11px; }

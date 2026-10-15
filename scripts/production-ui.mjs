@@ -27,7 +27,7 @@ async function login(name, pin) {
   await page.goto(base);
   await page.getByRole('button', { name: new RegExp(name) }).click();
   await page.getByLabel('PIN', { exact: true }).fill(pin);
-  await page.getByRole('button', { name: 'Anmelden' }).click();
+  await page.getByRole('button', { name: 'Anmelden', exact: true }).click();
   await page.locator('.sidebar').waitFor();
 }
 async function logout() {
@@ -41,7 +41,7 @@ async function addEmployee(name, role, pin) {
   await page.locator('input[name="name"]').fill(name);
   await page.locator('select[name="role"]').selectOption(role);
   const pinInput = page.locator('input[name="pin"]');
-  await expect(pinInput).toHaveAttribute('pattern', '[0-9]{8,12}');
+  await expect(pinInput).toHaveAttribute('pattern', '[0-9]{4,12}');
   await pinInput.fill(pin);
   await page.locator('input[name="hourlyRate"]').fill('15');
   await page.getByRole('button', { name: 'Speichern', exact: true }).click();

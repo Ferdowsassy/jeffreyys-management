@@ -25,7 +25,7 @@ try{
   await page.goto(base);
   await page.getByRole('button',{name:/Leo/}).click();
   await page.getByLabel('PIN',{exact:true}).fill('3456');
-  await page.getByRole('button',{name:'Anmelden'}).click();
+  await page.getByRole('button',{name:'Anmelden',exact:true}).click();
   await page.locator('.sidebar').waitFor();
   await page.locator('input[type=file]').setInputFiles(process.env.OCR_RECEIPT_FILE || resolve('scripts/fixtures/demo-receipt.png'));
   const expected=process.env.OCR_EXPECTED_JSON_FILE?JSON.parse(await readFile(process.env.OCR_EXPECTED_JSON_FILE,'utf8')):{amount:'27.5',orderNumber:'SCAN-123',address:'Teststraße 12',postalCode:'80802',city:'München',payment:'online'};

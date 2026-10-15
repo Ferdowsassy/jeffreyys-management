@@ -8,6 +8,7 @@ export function OrderQueue({user, data, act}) {
   const orders = (data.availableOrders || []).slice().sort((a,b) => a.createdAt.localeCompare(b.createdAt));
   const active = data.shifts.some(s => s.employeeId === user.id && !s.end);
   const onDuty = data.employees.filter(e => e.role === 'driver' && e.active && data.shifts.some(s => s.employeeId === e.id && !s.end));
+  const assigned=data.orders.filter(o=>o.status==='open').sort((a,b)=>a.createdAt.localeCompare(b.createdAt));
   async function claim(order) {
     setBusy(true);
     try {await act('claimOrder', {id:order.id, ...(chef ? {employeeId:drivers[order.id] || onDuty[0]?.id} : {})});}
@@ -48,6 +49,9 @@ export function OrderQueue({user, data, act}) {
       </Panel>)}
     </div>
     {!orders.length && <Empty>{chef ? 'Noch keine verfügbaren WinOrder-Lieferungen.' : 'Aktuell ist keine Bestellung verfügbar. Neue Lieferungen erscheinen hier automatisch.'}</Empty>}
+    {chef && <Panel title="Offene Lieferungen zuordnen" subtitle="Auch manuell erfasste Bestellungen können einem anderen Fahrer im Dienst zugeteilt werden.">
+      <div className="table-wrap"><table><thead><tr><th>Bestellung</th><th>Adresse</th><th>Aktueller Fahrer</th><th>Neu zuordnen</th></tr></thead><tbody>{assigned.map(o=><tr key={o.id}><td>{o.orderNumber}</td><td>{o.address}</td><td>{data.employees.find(e=>e.id===o.employeeId)?.name || '—'}</td><td><form className="order-claim" onSubmit={async e=>{e.preventDefault();setBusy(true);try{await act('assignOrder',{id:o.id,employeeId:drivers[o.id] || o.employeeId});}catch{}finally{setBusy(false);}}}><select aria-label={'Neuer Fahrer für '+o.orderNumber} value={drivers[o.id] || o.employeeId} onChange={e=>setDrivers({...drivers,[o.id]:e.target.value})}>{!onDuty.some(e=>e.id===o.employeeId) && <option value={o.employeeId}>Bitte wählen</option>}{onDuty.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select><button className="secondary" disabled={busy || !onDuty.length || !drivers[o.id] || drivers[o.id]===o.employeeId}>Zuordnen</button></form></td></tr>)}</tbody></table></div>{!assigned.length && <Empty>Keine offenen Lieferungen.</Empty>}
+    </Panel>}
   </>;
 }
 

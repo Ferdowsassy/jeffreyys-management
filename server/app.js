@@ -1,7 +1,7 @@
 import express from "express";
 import { access } from "node:fs/promises";
 import { resolve } from "node:path";
-import { randomBytes } from "node:crypto";
+import { randomBytes,createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { createStore, safeEmployee, checkPin } from "./store.js";
 import { createMysqlStore } from "./mysql-store.js";
@@ -9,6 +9,8 @@ import {prepareReturnTrip, searchStore} from "./return-routing.js";
 import {resolveReceiptMaps} from "./receipt-maps.js";
 import {winorderCredentials, authenticateWinorder, parseWinorder, importWinorder} from "./winorder.js";
 import { filterState, action, fail, payroll } from "./domain.js";
+import {mountPasskeys,mountNotifications} from './workspace-access.js';
+import {payrollPdf} from './payroll-pdf.js';
 
 const sessionUser = (employee) =>
   employee.role === "kitchen"
@@ -142,6 +144,14 @@ export async function createApp({
         .map(({ id, name, role }) => ({ id, name, role })),
     }),
   );
+  const signIn=(req,res,employee)=>{
+    if(req.token)closeSession(req.token);
+    const token=randomBytes(32).toString('hex');
+    sessions.set(token,{id:employee.id,expires:Date.now()+43200000});
+    res.cookie('jeffreyys_session',token,{httpOnly:true,sameSite:'strict',secure:secureCookie,maxAge:43200000,path:'/'});
+    res.json({user:sessionUser(employee)});
+  };
+  mountPasskeys(app,{store,origin,production,signIn});
   app.post("/api/login", (req, res) => {
     const key = req.ip;
     let item = attempts.get(key);
@@ -161,22 +171,12 @@ export async function createApp({
       .employees.find((e) => e.id === id && e.active);
     if (
       typeof pin !== "string" ||
-      !(demo ? /^\d{4,12}$/ : /^\d{8,12}$/).test(pin) ||
+      !/^\d{4,12}$/.test(pin) ||
       !employee ||
       !checkPin(pin, employee.pinHash)
     )
       return res.status(401).json({ error: "Invalid name or PIN" });
-    if (req.token) closeSession(req.token);
-    const token = randomBytes(32).toString("hex");
-    sessions.set(token, { id, expires: Date.now() + 43200000 });
-    res.cookie("jeffreyys_session", token, {
-      httpOnly: true,
-      sameSite: "strict",
-      secure: secureCookie,
-      maxAge: 43200000,
-      path: "/",
-    });
-    res.json({ user: sessionUser(employee) });
+    signIn(req,res,employee);
   });
   app.post("/api/logout", async (req, res, next) => {
     closeSession(req.token);
@@ -186,6 +186,7 @@ export async function createApp({
         await store.transact(state => {
           const employee = state.employees.find(e => e.id === req.user.id);
           if (employee) delete employee.location;
+          if (employee) employee.pushSubscriptions=(employee.pushSubscriptions || []).filter(s=>s.sessionHash!==createHash('sha256').update(req.token).digest('hex') && (!req.body?.pushEndpoint || s.endpoint!==req.body.pushEndpoint));
         });
         invalidate();
       }
@@ -210,12 +211,30 @@ export async function createApp({
       const orders = parseWinorder(req.body);
       const result = await store.transact(state => importWinorder(state, orders));
       invalidate();
+      void notifyPush({roles:['chef','driver'],message:'Neue Bestellungen sind verfügbar.'}).catch(()=>{});
       res.json({status:'success', data:result, message:'OK'});
     } catch (error) {next(error);}
   });
   app.use("/api", (req, res, next) =>
     req.user ? next() : res.status(401).json({ error: "Sign in required" }),
   );
+  const notifyPush=mountNotifications(app,{store});
+  app.get('/api/payroll.pdf',async(req,res,next)=>{try{
+    const month=req.query.month;
+    if(typeof month!=='string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month))fail('Bitte einen gültigen Monat wählen.');
+    const state=store.read(),id=req.user.role==='chef'?req.query.employeeId:req.user.id;
+    if(req.user.role!=='chef' && req.query.employeeId && req.query.employeeId!==req.user.id)fail('Nur die eigene Monatsübersicht ist verfügbar.',403);
+    const employees=state.employees.filter(e=>id ? e.id===id : !e.archived || state.shifts.some(s=>s.employeeId===e.id));
+    if(!employees.length)fail('Mitarbeiter nicht gefunden.',404);
+    const pdf=await payrollPdf(state,employees,month);
+    res.type('application/pdf').attachment('monatsuebersicht-'+month+'.pdf').send(pdf);
+  }catch(e){next(e);}});
+  app.get('/api/expenses/:id/attachment',(req,res,next)=>{try{
+    if(req.user.role!=='chef')fail('Chef-Zugang erforderlich.',403);
+    const attachment=(store.read().expenses || []).find(e=>e.id===req.params.id)?.attachment;
+    if(!attachment)fail('Rechnung nicht gefunden.',404);
+    res.type(attachment.type).attachment(attachment.name).send(Buffer.from(attachment.data,'base64'));
+  }catch(e){next(e);}});
   app.get('/api/integrations/winorder', (req, res) => {
     if (req.user.role !== 'chef') return res.status(403).json({error:'Chef access required'});
     res.json({configured:!!winorder, username:winorder?.username || null,
@@ -282,7 +301,7 @@ export async function createApp({
         );
         if (!current) fail("Sign in required", 401);
         if (req.body.type === "reset" && !demo) fail("Demo reset disabled", 403);
-        return action(s, current, req.body, { minPinLength: demo ? 4 : 8, returnTrip });
+        return action(s, current, req.body, { minPinLength: 4, returnTrip });
       });
       const state = store.read(),
         current = state.employees.find((e) => e.id === req.user.id && e.active);
@@ -293,6 +312,13 @@ export async function createApp({
           if (session.id === req.body.id && token !== req.token)
             closeSession(token);
       invalidate();
+      const type=req.body.type;
+      const event=type==='requestShiftCorrection'?{roles:['chef'],message:'Eine Zeitkorrektur wartet auf Freigabe.'}
+        :type==='reviewShiftCorrection'?{ids:[result?.employeeId],message:'Deine Zeitkorrektur wurde bearbeitet.'}
+        :['assignOrder','claimOrder'].includes(type)?{ids:[result?.employeeId],message:'Dir wurde eine Bestellung zugeordnet.'}
+        :['saveSchedule','deleteSchedule'].includes(type)?{ids:[result?.employeeId],message:'Dein Dienstplan wurde aktualisiert.'}
+        :type==='recordSalaryPayment'?{ids:[result?.employeeId],message:'Eine Gehaltszahlung wurde erfasst.'}:null;
+      if(event)void notifyPush(event).catch(()=>{});
       res.json({
         ok: true,
         result:

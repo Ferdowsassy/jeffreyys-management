@@ -31,7 +31,7 @@ async function session(name,pin,options = {}) {
   await page.goto(base);
   await page.getByRole('button',{name:new RegExp(name)}).click();
   await page.getByLabel('PIN',{exact:true}).fill(pin);
-  await page.getByRole('button',{name:'Anmelden'}).click();
+  await page.getByRole('button',{name:'Anmelden',exact:true}).click();
   await page.locator('.sidebar').waitFor();
   return {page,context};
 }

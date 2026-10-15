@@ -55,7 +55,7 @@ test('store refuses second writer and drains committed writes before releasing l
  await assert.rejects(store.transact(()=>{}),/closed/i);
 });
 import { createApp } from './app.js';
-test('non-demo authentication uses strong PINs and forbids demo reset', async t => {
+test('non-demo authentication accepts requested shorter PINs and forbids demo reset', async t => {
  const dir=await mkdtemp(tmpdir()+'/jeffreyys-authprod-');
  const app=await createApp({dataFile:dir+'/state.json',bootstrap:{name:'Owner',pin:'9876543210'}});
  const server=app.listen(0,'127.0.0.1'); await new Promise(r=>server.once('listening',r));
@@ -68,7 +68,10 @@ test('non-demo authentication uses strong PINs and forbids demo reset', async t 
  const reset=await fetch(base+'/api/action',{method:'POST',headers,body:JSON.stringify({type:'reset',confirmation:'RESET'})});
  assert.equal(reset.status,403);
  const weak=await fetch(base+'/api/action',{method:'POST',headers,body:JSON.stringify({type:'saveEmployee',name:'Bad',role:'driver',hourlyRate:10,pin:'1234'})});
- assert.equal(weak.status,400);
+ assert.equal(weak.status,200);
+ const shorter=await weak.json();
+ const shortLogin=await fetch(base+'/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:shorter.result.id,pin:'1234'})});
+ assert.equal(shortLogin.status,200);
  const strong=await fetch(base+'/api/action',{method:'POST',headers,body:JSON.stringify({type:'saveEmployee',name:'Worker',role:'driver',hourlyRate:10,pin:'0123456789'})});
  assert.equal(strong.status,200);
 });

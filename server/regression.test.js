@@ -12,7 +12,7 @@ test('frontend payroll matches server for open orders, overreturns and per-shift
   const date = '2026-09-01T10:00:00Z';
   const s = {employees:[{id:'d'}],shifts:[1,2].map(()=>({employeeId:'d',start:date,end:'2026-09-01T10:01:00Z',hourlyRate:1})),orders:[{employeeId:'d',createdAt:date,status:'open',deliveryFee:8,payment:'cash',amount:99}],handoffs:[{employeeId:'d',createdAt:date,chefConfirmed:true,counted:5}]};
   const a=backendPayroll(s)[0], b=frontendPayroll(s.employees[0],s,'2026-09');
-  assert.deepEqual(b,{hours:a.hours,wages:a.hourlyPay,fees:a.deliveryPay,cash:a.collectedCash,returned:a.returnedCash,retained:a.retainedCash,payout:a.payout});
+  assert.deepEqual(b,{hours:a.hours,wages:a.hourlyPay,fees:a.deliveryPay,gross:a.gross,cash:a.collectedCash,returned:a.returnedCash,retained:a.retainedCash,payout:a.payout,paid:0,balance:a.payout});
 });
 test('shift corrections cannot reopen settled cash or bypass handoff on manual close', () => {
  const {s,chef,driver} = setup();

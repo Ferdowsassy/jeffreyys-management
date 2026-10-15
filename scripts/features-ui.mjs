@@ -24,7 +24,7 @@ async function login(name,pin) {
   await page.goto(base);
   await page.getByRole('button',{name:new RegExp(name)}).click();
   await page.getByLabel('PIN',{exact:true}).fill(pin);
-  await page.getByRole('button',{name:'Anmelden'}).click();
+  await page.getByRole('button',{name:'Anmelden',exact:true}).click();
   await page.locator('.sidebar').waitFor();
 }
 async function nav(name) {await page.locator('.sidebar').getByRole('button',{name,exact:true}).click();}
@@ -41,7 +41,7 @@ try {
   await nav('Zeiten');
   await expect(page.getByRole('columnheader',{name:'Verdienst',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Mitarbeiter · Monat'}).click();
-  await expect(page.locator('tbody')).toContainText('Samira');
+  await expect(page.getByRole('table').filter({has:page.getByRole('columnheader',{name:'Bargeldabzug',exact:true})}).locator('tbody')).toContainText('Samira');
   await expect(page.getByLabel('Abrechnungsmonat')).toBeVisible();
   await nav('Analyse');
   for (const period of ['90 Tage','365 Tage']) {
@@ -66,23 +66,24 @@ try {
   await page.getByLabel('Mitarbeiter',{exact:true}).selectOption('samira');
   await page.getByLabel('Beginn',{exact:true}).fill('22:00');
   await page.getByLabel('Ende',{exact:true}).fill('02:00');
-  await page.getByRole('button',{name:'Speichern',exact:true}).click();
+  await page.getByRole('button',{name:'Diese Zeit eintragen',exact:true}).click();
   await page.getByLabel('Planrolle').selectOption('kitchen');
   const shift = page.locator('.week-day').first().locator('.schedule-shift');
   await expect(shift).toContainText('(+1 Tag)');
   await shift.getByRole('button',{name:'Bearbeiten',exact:true}).click();
   await page.getByLabel('Beginn',{exact:true}).fill('21:00');
-  await page.getByRole('button',{name:'Speichern',exact:true}).click();
+  await page.getByRole('button',{name:'Diese Zeit eintragen',exact:true}).click();
   await expect(shift).toContainText('21:00');
   await page.screenshot({path:evidence + '/features-plan.png',fullPage:true});
   await shift.getByRole('button',{name:'Bearbeiten',exact:true}).click();
-  await page.getByRole('button',{name:'Schicht entfernen'}).click();
+  await page.getByRole('button',{name:'Planeintrag entfernen'}).click();
   await expect(shift).toHaveCount(0);
   const driver = await browser.newContext();
   await driver.request.post(base + '/api/login',{data:{id:'leo',pin:'3456'}});
   await driver.request.post(base + '/api/action',{data:{type:'saveLocation',latitude:48.14,longitude:11.58}});
   await driver.close();
   await page.getByRole('button',{name:'Abmelden'}).click();
+  await expect(page.getByRole('heading',{name:'Schön, dass du da bist.'})).toBeVisible();
   await login('Samira','2345');
   await expect(page.getByRole('region',{name:'Live-Fahrerkarte'})).toBeVisible();
   await expect(page.locator('.driver-marker[data-driver-id="leo"]')).toHaveAttribute('data-latitude','48.14');
@@ -105,6 +106,7 @@ try {
   await page.screenshot({path:evidence + '/features-kitchen-mobile.png',fullPage:true});
   await page.setViewportSize({width:1440,height:1000});
   await page.getByRole('button',{name:'Abmelden'}).click();
+  await expect(page.getByRole('heading',{name:'Schön, dass du da bist.'})).toBeVisible();
   await login('Leo','3456');
   await nav('Belege');
   await page.getByRole('button',{name:'Beleg erfassen',exact:true}).click();

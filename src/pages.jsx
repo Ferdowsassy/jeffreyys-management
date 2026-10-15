@@ -13,14 +13,18 @@ import {
 } from "lucide-react";
 import { api, Title, Panel, Form, Empty, Badge, roleName } from "./main";
 import {payroll as calculatePayroll} from "../shared/payroll";
-import { euro, day, sum, hours, formatHours, payroll } from "./finance";
+import { euro, day, sum, hours, formatHours } from "./finance";
 import {StoreSettings, ReturnTripControls} from "./return-trip";
 import {ShiftApprovals} from "./shift-corrections";
-import EarningsWeek from "./earnings-week";
-import {dailyEarnings} from "../shared/daily-stats";
+import {dailyEarnings,dayStart,shiftDate} from "../shared/daily-stats";
+import {periodStats} from '../shared/accounting';
 import { scanReceipt } from "./receipt-ocr";
 import { summarizeItems } from "./order-items";
 import {WinOrderSettings} from './order-queue';
+import {ScheduleEditor, ShiftTemplateEditor} from './schedule-editor';
+import {absenceNames, scheduleHours} from '../shared/schedule';
+import {MonthlyPayroll, Expenses, Customers, TimeMonthChart, RevenueTrend} from './operations';
+import {AccountSettings, ClockOut} from './workspace-access';
 const today = () => day(Date.now());
 const person = (data, id) =>
   data.employees.find((e) => e.id === id)?.name || "Unbekannt";
@@ -91,7 +95,7 @@ export function Schedule({ user, data, act }) {
   const [offset, setOffset] = useState(0),
     [show, setShow] = useState(false),
     [editing, setEditing] = useState(null),
-    [role, setRole] = useState("all");
+    [role, setRole] = useState("all"), [templatesOpen,setTemplatesOpen]=useState(false);
   let monday = new Date(today() + "T12:00:00Z");
   monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7) + offset * 7);
   const days = Array.from({ length: 7 }, (_, i) => {
@@ -99,15 +103,8 @@ export function Schedule({ user, data, act }) {
     d.setUTCDate(d.getUTCDate() + i);
     return day(d);
   });
-  const scheduled = data.schedule.filter(s => days.includes(s.date) && (role === "all" || data.employees.find(e => e.id === s.employeeId)?.role === role)).sort((a,b) => a.start.localeCompare(b.start));
-  const cost = sum(scheduled, (s) => {
-    const e = data.employees.find((e) => e.id === s.employeeId);
-    let diff =
-      (new Date(`${s.date}T${s.end}`) - new Date(`${s.date}T${s.start}`)) /
-      3600000;
-    if (diff < 0) diff += 24;
-    return diff * (e?.hourlyRate || 0);
-  });
+  const scheduled = data.schedule.filter(s => days.includes(s.date) && (role === "all" || data.employees.find(e => e.id === s.employeeId)?.role === role)).sort((a,b) => (a.start || '').localeCompare(b.start || ''));
+  const cost = sum(scheduled, s=>scheduleHours(s)*(data.employees.find(e=>e.id===s.employeeId)?.hourlyRate || 0));
   return (
     <>
       <Title
@@ -154,31 +151,9 @@ export function Schedule({ user, data, act }) {
           </button>
         )}
       </div>
-      {show && (
-        <Panel title={editing?.id ? "Geplante Schicht bearbeiten" : "Schicht hinzufügen"} action={<button className="text-button" onClick={() => {setShow(false);setEditing(null);}}>Abbrechen</button>}>
-          <Form
-            key={editing ? `${editing.employeeId}-${editing.date}` : "new"}
-            initial={editing || {}}
-            fields={[
-              {
-                name: "employeeId",
-                label: "Mitarbeiter",
-                options: data.employees
-                  .filter((e) => e.active !== false)
-                  .map((e) => ({ value: e.id, label: e.name })),
-              },
-              { name: "date", label: "Datum", type: "date", value: days[0] },
-              { name: "start", label: "Beginn", type: "time", value: "17:00" },
-              { name: "end", label: "Ende", type: "time", value: "22:00" },
-            ]}
-            onSubmit={async (v) => {
-              await act("saveSchedule", {...v, ...(editing?.id ? {id:editing.id} : {})});
-              setShow(false);
-              setEditing(null);
-            }}
-          >{editing?.id && <button type="button" className="text-button" onClick={async () => {try {await act("deleteSchedule", {id:editing.id});setShow(false);setEditing(null);} catch {}}}>Schicht entfernen</button>}</Form>
-        </Panel>
-      )}
+      {user.role==='chef' && <div className="toolbar"><button className="secondary" onClick={()=>setTemplatesOpen(!templatesOpen)}>Schichtvorlagen bearbeiten</button><span>{scheduled.length} Einträge · {formatHours(sum(scheduled,scheduleHours))} geplant</span></div>}
+      {templatesOpen && <ShiftTemplateEditor data={data} act={act} onClose={()=>setTemplatesOpen(false)} />}
+      {show && <ScheduleEditor key={editing?.id || editing?.date || 'new'} data={data} act={act} editing={editing || {date:days[0]}} onClose={()=>{setShow(false);setEditing(null);}} />}
       <Panel
         title="Wochenübersicht"
         subtitle={
@@ -205,7 +180,8 @@ export function Schedule({ user, data, act }) {
                   <div className="schedule-shift" key={s.id}>
                     <strong>{person(data, s.employeeId)}</strong>
                     <span>
-                      {s.start}–{s.end}{s.end < s.start ? " (+1 Tag)" : ""}
+                      {absenceNames[s.kind] || `${s.start}–${s.end}${s.end < s.start ? ' (+1 Tag)' : ''}`}
+                      {s.templateName && <small>{s.templateName}</small>}
                     </span>
                     <span>{roleName[data.employees.find(e => e.id === s.employeeId)?.role]}</span>
                     {user.role === "chef" && <button className="text-button" onClick={() => {setEditing(s);setShow(true);}}>Bearbeiten</button>}
@@ -222,137 +198,7 @@ export function Schedule({ user, data, act }) {
     </>
   );
 }
-function Payroll({ data, user, personal = false }) {
-  const [month, setMonth] = useState(today().slice(0, 7)),
-    [detail, setDetail] = useState(null);
-  const rows = data.employees.map((e) => ({ e, ...payroll(e, data, month) }));
-  return (
-    <>
-      <EarningsWeek user={user} data={data} />
-      <div className="toolbar">
-        <label>
-          Abrechnungsmonat{" "}
-          <input
-            aria-label="Abrechnungsmonat"
-            type="month"
-            value={month}
-            onChange={(e) => setMonth(e.target.value)}
-          />
-        </label>
-        <button
-          className="secondary"
-          onClick={() => {
-            const safe = (s) =>
-              '"' +
-              String(s)
-                .replace(/^[=+@-]/, "'")
-                .replaceAll('"', '""') +
-              '"';
-            download(
-              `abrechnung-${month}.csv`,
-              "\ufeff" +
-                [
-                  [
-                    "Name",
-                    "Rolle",
-                    "Telefon",
-                    "Arbeitszeit",
-                    "Lohn",
-                    "Liefergeld",
-                    "Verdienst",
-                    "Bar kassiert",
-                    "Zurückgegeben",
-                    "Einbehalten",
-                    "Auszahlung",
-                  ],
-                  ...rows.map((r) => [
-                    r.e.name,
-                    roleName[r.e.role],
-                    r.e.phone || "",
-                    formatHours(r.hours),
-                    r.wages,
-                    r.fees,
-                    r.wages + r.fees,
-                    r.cash,
-                    r.returned,
-                    r.retained,
-                    r.payout,
-                  ]),
-                ]
-                  .map((r) => r.map(safe).join(";"))
-                  .join("\n"),
-              "text/csv",
-            );
-          }}
-        >
-          <Download size={16} />
-          CSV exportieren
-        </button>
-      </div>
-      <Panel
-        title={personal ? "Dein Monatsverdienst" : "Monatsabrechnung"}
-        subtitle="Lohn + Liefergeld − einbehaltenes Bargeld. Bereits abgegebenes Bargeld wird nicht doppelt abgezogen."
-      >
-        {personal ? <div className="personal-earnings">
-          {rows.map(r => <React.Fragment key={r.e.id}>
-            <p className="earnings-owner">{r.e.name} · {roleName[r.e.role]}</p>
-            <div><span>Verdienst vor Bargeldabzug</span><strong>{euro(r.wages + r.fees)}</strong></div>
-            <div><span>Arbeitsstunden</span><strong>{formatHours(r.hours)}</strong></div>
-            <div><span>Stundenlohn gesamt</span><strong>{euro(r.wages)}</strong></div>
-            <div><span>Auszahlung</span><strong>{euro(r.payout)}</strong></div>
-            {r.fees !== 0 && <div><span>Liefergeld</span><strong>{euro(r.fees)}</strong></div>}
-            {r.retained !== 0 && <div><span>Einbehaltenes Bargeld</span><strong>{euro(r.retained)}</strong></div>}
-          </React.Fragment>)}
-        </div> : <Table
-          headers={[
-            "Mitarbeiter",
-            "Rolle",
-            "Telefon",
-            "Arbeitszeit",
-            "Lohn",
-            "Liefergeld",
-            "Verdienst",
-            "Einbehalten",
-            "Auszahlung",
-          ]}
-          rows={rows.map((r) => [
-            <button
-              className="text-button"
-              onClick={() => setDetail(detail === r.e.id ? null : r.e.id)}
-            >
-              {r.e.name}
-            </button>,
-            roleName[r.e.role],
-            r.e.phone || "—",
-            formatHours(r.hours),
-            euro(r.wages),
-            euro(r.fees),
-            euro(r.wages + r.fees),
-            euro(r.retained),
-            <strong>{euro(r.payout)}</strong>,
-          ])}
-        />}
-      </Panel>
-      {detail && (
-        <Panel title={"Barbestellungen · " + person(data, detail)}>
-          <OrderTable
-            data={data}
-            orders={data.orders.filter(
-              (o) =>
-                o.employeeId === detail &&
-                o.payment === "cash" &&
-                day(o.createdAt).startsWith(month),
-            )}
-          />
-        </Panel>
-      )}
-      <div className="notice">
-        Offene Schichten sind vorläufig. Monatsübergreifende Schichten und
-        Übergaben müssen vor einer echten Abrechnung geprüft werden.
-      </div>
-    </>
-  );
-}
+function Payroll(props) {return <MonthlyPayroll {...props} />;}
 function OrderTable({ orders, data }) {
   return (
     <Table
@@ -381,6 +227,7 @@ export function Management({ user, data, page, act, notify }) {
   const [editing, setEditing] = useState(null),
     [show, setShow] = useState(false),
     [teamRole, setTeamRole] = useState("all"),
+    [teamSearch,setTeamSearch]=useState(''),
     [timeView, setTimeView] = useState("day"),
     [date, setDate] = useState(today());
   useEffect(() => {
@@ -427,13 +274,14 @@ export function Management({ user, data, page, act, notify }) {
     setEditing(null);
     setShow(!show);
   };
-  if (page === "Geld") body = <Payroll data={data} user={user} />;
+  if (page === "Geld") body = <Payroll data={data} user={user} act={act} />;
   if (page === "Team")
     body = (
       <>
         <div className="toolbar">
+          <label>Mitarbeiter suchen<input type="search" value={teamSearch} onChange={e=>setTeamSearch(e.target.value)} placeholder="Name oder Telefon" /></label>
           <label>Rolle <select aria-label="Teamrolle" value={teamRole} onChange={e => setTeamRole(e.target.value)}>
-            <option value="all">Alle Mitarbeiter ({data.employees.length})</option>
+            <option value="all">Alle Mitarbeiter</option><option value="archived">Entfernte Mitarbeiter</option>
             {Object.entries(roleName).map(([role, label]) => <option key={role} value={role}>{label} ({data.employees.filter(e => e.role === role).length})</option>)}
           </select></label>
           <button className="primary" onClick={openNew}>
@@ -463,12 +311,12 @@ export function Management({ user, data, page, act, notify }) {
                 {
                   name: "pin",
                   label: editing
-                    ? `Neue PIN (optional, ${user?.demo ? "4–12" : "8–12"} Ziffern)`
-                    : `${user?.demo ? "4–12" : "8–12"}-stellige PIN`,
+                    ? `Neue PIN (optional, ${"4–12"} Ziffern)`
+                    : `${"4–12"}-stellige PIN`,
                   type: "password",
                   inputMode: "numeric",
-                  pattern: user?.demo ? "[0-9]{4,12}" : "[0-9]{8,12}",
-                  minLength: user?.demo ? 4 : 8,
+                  pattern: "[0-9]{4,12}",
+                  minLength: 4,
                   maxLength: 12,
                   required: !editing,
                 },
@@ -494,13 +342,13 @@ export function Management({ user, data, page, act, notify }) {
         <Panel title="Teamübersicht">
           <Table
             headers={["Name", "Rolle", "Telefon", "Stundenlohn", "Status", "Aktion"]}
-            rows={data.employees.filter(e => teamRole === "all" || e.role === teamRole).map((e) => [
+            rows={data.employees.filter(e => (teamRole === "archived" ? e.archived : !e.archived && (teamRole === "all" || e.role === teamRole)) && (e.name+' '+(e.phone || '')).toLocaleLowerCase('de-DE').includes(teamSearch.toLocaleLowerCase('de-DE'))).map((e) => [
               <strong>{e.name}</strong>,
               roleName[e.role],
               e.phone || "—",
               euro(e.hourlyRate),
               <Badge tone={e.active !== false ? "green" : ""}>
-                {e.active !== false ? "Aktiv" : "Pausiert"}
+                {e.archived ? 'Entfernt' : e.active !== false ? "Aktiv" : "Pausiert"}
               </Badge>,
               <div className="row">
                 <button
@@ -512,15 +360,10 @@ export function Management({ user, data, page, act, notify }) {
                 >
                   Bearbeiten
                 </button>
-                <button
-                  className="text-button"
-                  onClick={() => {
-                    if (confirm(e.name + " deaktivieren?"))
-                      act("deactivateEmployee", { id: e.id }).catch(() => {});
-                  }}
-                >
-                  Deaktivieren
-                </button>
+                <button className="text-button" disabled={e.id===user.id} onClick={()=>{
+                  if(e.archived)act('restoreEmployee',{id:e.id}).catch(()=>{});
+                  else if(confirm(e.name+' aus dem aktiven Team entfernen? Abrechnungen bleiben erhalten.'))act('archiveEmployee',{id:e.id}).catch(()=>{});
+                }}>{e.archived ? 'Wiederherstellen' : 'Mitarbeiter entfernen'}</button>
               </div>,
             ])}
           />
@@ -575,15 +418,8 @@ export function Management({ user, data, page, act, notify }) {
               <strong>{z.postalCode}</strong>,
               z.name,
               euro(z.fee),
-              <button
-                className="text-button"
-                onClick={() => {
-                  setEditing(z);
-                  setShow(true);
-                }}
-              >
-                Bearbeiten
-              </button>,
+              <div className="row"><button className="text-button" onClick={()=>{setEditing(z);setShow(true);}}>Bearbeiten</button>
+              <button className="text-button" onClick={()=>{if(confirm('Liefergebiet '+z.postalCode+' löschen? Bereits erfasste Liefergelder bleiben erhalten.'))act('deleteZone',{id:z.id}).catch(()=>{});}}>Löschen</button></div>,
             ])}
           />
         </Panel>
@@ -606,9 +442,9 @@ export function Management({ user, data, page, act, notify }) {
         </Panel>
       </>
     );
-  if (page === "Einstellungen") body = <><WinOrderSettings data={data} /><StoreSettings data={data} act={act} notify={notify} /></>;
+  if (page === "Einstellungen") body = <><WinOrderSettings data={data} /><StoreSettings data={data} act={act} notify={notify} /><AccountSettings user={user} notify={notify} /></>;
   if (page === "Finanzen")
-    body = (
+    body = (<><Expenses data={data} act={act} />
       <Panel
         title="Kalkulationsgrundlagen"
         subtitle="Fixkosten als monatliche Gesamtsumme; Tagesanteil nach Kalendertagen."
@@ -632,7 +468,7 @@ export function Management({ user, data, page, act, notify }) {
             )
           }
         />
-      </Panel>
+      </Panel></>
     );
   if (page === "Kasse")
     body = (
@@ -689,82 +525,7 @@ export function Management({ user, data, page, act, notify }) {
         </div>
       </Panel>
     );
-  if (page === "Kunden") {
-    const grouped = {};
-    for (const o of data.orders.filter((o) => !o.noAddress && o.address)) {
-      const key = (o.address + " " + o.postalCode).toLowerCase().trim();
-      (grouped[key] ??= []).push(o);
-    }
-    body = (
-      <Panel
-        title="Deine Lieferadressen"
-        subtitle="Eine Adresse kann mehrere Haushalte enthalten. Keine automatische Kontaktaufnahme."
-      >
-        <Table
-          headers={[
-            "Adresse",
-            "Bestellungen",
-            "Umsatz",
-            "Ø Wert",
-            "Zuletzt",
-            "Status",
-            "",
-          ]}
-          rows={Object.values(grouped).map((os) => {
-            os.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-            const last = os.at(-1),
-              days = Math.floor(
-                (Date.now() - new Date(last.createdAt)) / 86400000,
-              ),
-              interval =
-                os.length > 1
-                  ? (new Date(last.createdAt) - new Date(os[0].createdAt)) /
-                    86400000 /
-                    (os.length - 1)
-                  : null,
-              risk = interval !== null && days > Math.max(7, interval * 1.5),
-              status = risk
-                ? "Gefährdet"
-                : os.length === 1
-                  ? "Neu"
-                  : os.length >= 5
-                    ? "Stammkunde"
-                    : "Aktiv";
-            return [
-              last.address + ", " + last.postalCode,
-              os.length,
-              euro(sum(os, (o) => o.amount)),
-              euro(sum(os, (o) => o.amount) / os.length),
-              days + " Tage",
-              <Badge tone={risk ? "orange" : "green"}>{status}</Badge>,
-              risk ? (
-                <button
-                  className="text-button"
-                  onClick={() =>
-                    act("addTask", {
-                      text:
-                        "Kundenreaktivierung prüfen: " +
-                        last.address +
-                        " " +
-                        last.postalCode,
-                      visibility: "chef",
-                    }).catch(() => {})
-                  }
-                >
-                  Aufgabe anlegen
-                </button>
-              ) : (
-                "—"
-              ),
-            ];
-          })}
-        />
-        <div className="panel-foot">
-          Belege ohne Adresse können keinem Haushalt zugeordnet werden.
-        </div>
-      </Panel>
-    );
-  }
+  if (page === "Kunden") body=<Customers data={data} act={act} />;
   if (page === "Zeiten") {
     const shifts = data.shifts.filter((s) => day(s.start) === date);
     body = (
@@ -783,7 +544,7 @@ export function Management({ user, data, page, act, notify }) {
           />}
         </div>
         <ShiftApprovals data={data} act={act} />
-        {timeView === "month" ? <Payroll data={data} user={user} /> : <>
+        {timeView === "month" ? <><TimeMonthChart data={data} /><Payroll data={data} user={user} act={act} /></> : <>
         <Panel title="Erfasste Arbeitszeit">
           <Table
             headers={[
@@ -1052,26 +813,14 @@ export function Driver({ user, data, page, act, notify }) {
                 {formatHours(active ? hours(active) : 0)}
                 <span>Arbeitszeit</span>
               </div>
-              {user.role === "driver" && (
+              {(user.role === "driver" || user.role === "kitchen") && (
                 <div className="shift-clock">
                   {euro(dailyEarnings(data, user.id, today()).gross)}
                   <span>Heute verdient · vor Bargeldabzug</span>
                   <small>Auszahlung gesamt: {euro(personalPay.payout)} · Bargeld bei dir: {euro(personalPay.retainedCash)}</small>
                 </div>
               )}
-              <button
-                className={active ? "secondary" : "primary"}
-                onClick={async () => {
-                  try {
-                    if (active) {
-                      await act("clockOut");
-                    } else await act("clockIn");
-                  } catch {}
-                }}
-              >
-                <Clock size={18} />
-                {active ? "Ausstempeln" : "Jetzt einstempeln"}
-              </button>
+              <ClockOut active={active} act={act} />
             </div>
           {user.role === "driver" && <details className="shift-help"><summary>Was passiert beim Ausstempeln?</summary><p>Offene Lieferungen werden als zugestellt markiert. Bargeld bleibt bei dir und wird von der Auszahlung abgezogen.</p></details>}
           </Panel>
@@ -1219,6 +968,7 @@ export function Driver({ user, data, page, act, notify }) {
       {page === "Verdienst" && (
         <Payroll
           personal
+          act={act}
           user={user}
           data={{
             ...data,
@@ -1248,31 +998,10 @@ export function Analytics({ data, notify, act }) {
   const prevEnd = new Date(start - 1),
     prevStart = new Date(start);
   prevStart.setDate(prevStart.getDate() - length);
-  const calc = (a, b) => {
-    const os = data.orders.filter(
-        (o) => new Date(o.createdAt) >= a && new Date(o.createdAt) <= b,
-      ),
-      revenue = sum(os, (o) => o.amount),
-      wages =
-        sum(
-          data.shifts.filter(
-            (s) => new Date(s.start) >= a && new Date(s.start) <= b,
-          ),
-          (s) => hours(s) * s.hourlyRate,
-        ) + sum(os, (o) => o.deliveryFee);
-    return {
-      os,
-      revenue,
-      count: os.length,
-      average: os.length ? revenue / os.length : 0,
-      wages,
-      ratio: revenue ? (wages / revenue) * 100 : 0,
-      profit:
-        revenue -
-        wages -
-        (revenue * Number(data.settings.foodCostPercent || 0)) / 100 -
-        (Number(data.settings.fixedCosts || 0) * length) / 30,
-    };
+  const calc = (a,b) => {
+    const first=day(a),last=shiftDate(day(b),1);
+    const result=periodStats(data,{role:'chef'},'range',{first,end:last,from:dayStart(first),to:dayStart(last)});
+    return {os:result.orders,revenue:result.revenue,count:result.orders.length,average:result.orders.length?result.revenue/result.orders.length:0,wages:result.wages,ratio:result.revenue?result.wages/result.revenue*100:0,profit:result.profit};
   };
   const a = calc(start, end),
     b = calc(prevStart, prevEnd),
@@ -1329,6 +1058,7 @@ export function Analytics({ data, notify, act }) {
           </button>
         </div>
       </div>
+      <RevenueTrend data={data} />
       <Panel title="Im Vergleich zum vorherigen Zeitraum">
         <Table
           headers={["Kennzahl", "Aktuell", "Vorperiode", "Differenz"]}
