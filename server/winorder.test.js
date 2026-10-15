@@ -104,3 +104,62 @@ test('unknown fields stay in chef review; JSON and Latin-1 work; invalid batches
   assert.equal((await send(batch)).status,400); assert.equal(app.locals.store.read().orders.length,count);
   assert.equal((await send('<WinOrder><bad></WinOrder>')).status,400);
 });
+
+test('chef diagnostics distinguish missing auth, rejected credentials, invalid bodies and successful retries without exposing input', async t => {
+  const {base, request, login, app} = await fixture(t,{winorder:credentials}), send=sender(base);
+  const chef=await login('alex','1234'), driver=await login('leo','3456'), kitchen=await login('samira','2345');
+  const status=() => request('/api/integrations/winorder',undefined,chef);
+  assert.deepEqual((await status()).body.attempts,[]);
+  assert.equal((await request('/api/integrations/winorder')).status,401);
+  for (const cookie of [driver,kitchen]) assert.equal((await request('/api/integrations/winorder',undefined,cookie)).status,403);
+  const xml=winorderSample('DIAGNOSTIC-PRIVATE-ID');
+  assert.equal((await send(xml,{authorization:''})).status,401);
+  let attempt=(await status()).body.attempts[0];
+  assert.equal(attempt.authentication,'missing'); assert.equal(attempt.authenticated,false);
+  assert.match(attempt.message,/Kein Authentifizierungsheader/);
+  assert.equal((await send(xml,{authorization:'Bearer private-bearer-value'})).status,401);
+  assert.equal((await status()).body.attempts[0].authentication,'other');
+  assert.equal((await send(xml,{authorization:'Basic '+Buffer.from('private-user:private-password').toString('base64')})).status,401);
+  attempt=(await status()).body.attempts[0];
+  assert.equal(attempt.authentication,'basic'); assert.equal(attempt.authenticated,false);
+  assert.match(attempt.message,/nicht akzeptiert/);
+  const invalid='private-body-customer-data';
+  assert.equal((await send(invalid,{contentType:'application/x-www-form-urlencoded; charset=utf-8'})).status,400);
+  attempt=(await status()).body.attempts[0];
+  assert.equal(attempt.authenticated,true); assert.equal(attempt.status,400);
+  assert.equal(attempt.contentType,'application/x-www-form-urlencoded'); assert.equal(attempt.bytes,Buffer.byteLength(invalid));
+  assert.match(attempt.message,/kein gültiges JSON/);
+  assert.equal((await send('<WinOrder><Unexpected /></WinOrder>')).status,400);
+  assert.match((await status()).body.attempts[0].message,/OrderList fehlt/);
+  assert.equal((await send('x'.repeat(1048577))).status,413);
+  attempt=(await status()).body.attempts[0];
+  assert.equal(attempt.status,413); assert.equal(attempt.authenticated,true); assert.match(attempt.message,/1 MiB/);
+  assert.equal((await send(xml)).status,200);
+  assert.equal((await send(xml,{path:'/api/integrations/winorder/orders'})).status,200);
+  const response=(await status()).body;
+  assert.equal(response.attempts.length,8); assert.ok(response.lastReceivedAt);
+  assert.equal(response.attempts[0].status,200); assert.equal(response.attempts[0].authenticated,true);
+  const serialized=JSON.stringify(response.attempts);
+  for (const secret of [credentials.password,auth,'private-bearer-value','private-user','private-password',invalid,'DIAGNOSTIC-PRIVATE-ID','Teststraße','089123456'])
+    assert.equal(serialized.includes(secret),false,secret);
+  assert.equal(app.locals.store.read().orders.filter(o=>o.source==='winorder').length,1);
+});
+
+test('diagnostics retain only twenty attempts and do not reflect arbitrary errors or header values', async t => {
+  const {base, request, login, app} = await fixture(t,{winorder:credentials}), send=sender(base);
+  const chef=await login('alex','1234');
+  const status=() => request('/api/integrations/winorder',undefined,chef);
+  const transact=app.locals.store.transact;
+  app.locals.store.transact=async () => {throw new Error('private-database-host-password');};
+  try {assert.equal((await send(winorderSample('FAILED-WRITE'))).status,500);}
+  finally {app.locals.store.transact=transact;}
+  let attempts=(await status()).body.attempts;
+  assert.equal(attempts[0].status,500); assert.match(attempts[0].message,/Interner Fehler/);
+  assert.equal(JSON.stringify(attempts).includes('private-database'),false);
+  for (let i=0;i<22;i++) await send('private-body',{contentType:'application/private-secret; boundary=private-header'});
+  attempts=(await status()).body.attempts;
+  assert.equal(attempts.length,20); assert.ok(attempts.every(a=>a.status===400 && a.contentType==='other'));
+  assert.equal(JSON.stringify(attempts).includes('private'),false);
+  // Diagnostics are process-local and never written to the business store.
+  assert.equal(JSON.stringify(app.locals.store.read()).includes('winorderAttempt'),false);
+});

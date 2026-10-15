@@ -8,6 +8,7 @@ import { createMysqlStore } from "./mysql-store.js";
 import {prepareReturnTrip, searchStore} from "./return-routing.js";
 import {resolveReceiptMaps} from "./receipt-maps.js";
 import {winorderCredentials, authenticateWinorder, parseWinorder, importWinorder} from "./winorder.js";
+import {createWinorderDiagnostics} from './winorder-diagnostics.js';
 import { filterState, action, fail, payroll } from "./domain.js";
 import {mountPasskeys,mountNotifications} from './workspace-access.js';
 import {payrollPdf} from './payroll-pdf.js';
@@ -44,6 +45,7 @@ export async function createApp({
     aiLimits = new Map(),
     winorderLimits = new Map();
   app.locals.store = store;
+  const winorderDiagnostics = createWinorderDiagnostics();
   let stopping = false;
   app.locals.close = async () => {
     stopping = true;
@@ -193,7 +195,7 @@ export async function createApp({
       res.json({ ok: true });
     } catch (error) {next(error);}
   });
-  app.post(winorderPaths, (req, res, next) => {
+  app.post(winorderPaths, winorderDiagnostics.begin, (req, res, next) => {
     try {
       let limit = winorderLimits.get(req.ip);
       if (!limit || limit.until <= Date.now()) {
@@ -201,6 +203,7 @@ export async function createApp({
       }
       if (++limit.count > 120) {res.set('Retry-After', '60'); fail('WinOrder request limit reached', 429);}
       authenticateWinorder(req, winorder);
+      req.winorderAttempt.authenticated = true;
       next();
     } catch (error) {
       if (error.status === 401) res.set('WWW-Authenticate', 'Basic realm="WinOrder", charset="UTF-8"');
@@ -214,6 +217,9 @@ export async function createApp({
       void notifyPush({roles:['chef','driver'],message:'Neue Bestellungen sind verfügbar.'}).catch(()=>{});
       res.json({status:'success', data:result, message:'OK'});
     } catch (error) {next(error);}
+  }, (error, req, res, next) => {
+    winorderDiagnostics.failure(req, error);
+    next(error);
   });
   app.use("/api", (req, res, next) =>
     req.user ? next() : res.status(401).json({ error: "Sign in required" }),
@@ -239,7 +245,8 @@ export async function createApp({
     if (req.user.role !== 'chef') return res.status(403).json({error:'Chef access required'});
     res.json({configured:!!winorder, username:winorder?.username || null,
       endpoint:origin ? origin+'/sendorder' : null,
-      lastReceivedAt:store.read().settings.winorderLastReceivedAt || null});
+      lastReceivedAt:store.read().settings.winorderLastReceivedAt || null,
+      attempts:winorderDiagnostics.list()});
   });
   app.get("/api/events", (req, res) => {
     res.set({

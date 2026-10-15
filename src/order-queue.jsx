@@ -57,17 +57,31 @@ export function OrderQueue({user, data, act}) {
 
 export function WinOrderSettings({data}) {
   const [status, setStatus] = useState(null), [error, setError] = useState('');
+  const [refresh, setRefresh] = useState(0), [refreshing, setRefreshing] = useState(false);
   useEffect(() => {
     let alive = true;
-    api('integrations/winorder').then(value => {if (alive) {setStatus(value);setError('');}}).catch(error => {if (alive) setError(error.message);});
+    setRefreshing(true);
+    api('integrations/winorder').then(value => {if (alive) {setStatus(value);setError('');}})
+      .catch(error => {if (alive) setError(error.message);})
+      .finally(() => {if (alive) setRefreshing(false);});
     return () => {alive = false;};
-  }, [data.settings.winorderLastReceivedAt]);
-  return <Panel title="WinOrder" subtitle="Lieferbestellungen direkt aus der Kasse übernehmen.">
+  }, [data.settings.winorderLastReceivedAt, refresh]);
+  return <Panel title="WinOrder" subtitle="Lieferbestellungen direkt aus der Kasse übernehmen."
+    action={<button className="secondary" disabled={refreshing} onClick={() => setRefresh(value => value + 1)}>{refreshing ? 'Wird aktualisiert …' : 'Aktualisieren'}</button>}>
     {error ? <p role="alert">{error}</p> : !status ? <p>Verbindung wird geprüft …</p> : <>
       <p><strong>{status.configured ? 'Empfang eingerichtet' : 'Empfang noch nicht eingerichtet'}</strong></p>
       {status.lastReceivedAt ? <p>Letzter Empfang: {new Date(status.lastReceivedAt).toLocaleString('de-DE',{timeZone:'Europe/Berlin'})}</p> : <p>Noch keine Bestellung empfangen.</p>}
       {status.configured && <dl className="winorder-details"><dt>Senden an HTTP-Server</dt><dd>{status.endpoint || 'HTTPS-Adresse des Servers + /sendorder'}</dd><dt>Benutzername</dt><dd>{status.username}</dd></dl>}
       <p>In WinOrder „Bestellung auf diesem Computer speichern“ und „drucken“ auf Ja lassen. Neue Lieferungen erscheinen unter Bestellungen.</p>
+      <h3>Letzte Übertragungsversuche</h3>
+      <p>Nach dem Senden in WinOrder hier auf Aktualisieren drücken. Angezeigt werden bis zu 20 Versuche seit dem letzten App-Server-Neustart.</p>
+      {status.attempts?.length ? <ul className="winorder-attempts">{status.attempts.map((attempt, index) => <li key={attempt.receivedAt+'-'+index}>
+        <strong>{new Date(attempt.receivedAt).toLocaleString('de-DE',{timeZone:'Europe/Berlin'})} · HTTP {attempt.status}</strong>
+        <p>{attempt.message}</p>
+        <small>Authentifizierung: {attempt.authenticated === null ? 'nicht geprüft' : attempt.authenticated ? 'erfolgreich' : attempt.authentication === 'missing' ? 'nicht angekommen' : 'nicht akzeptiert'}
+          {' · Datentyp: '}{attempt.contentType === 'missing' ? 'nicht angegeben' : attempt.contentType === 'other' ? 'anderer Typ' : attempt.contentType}
+          {attempt.bytes !== null && <> · {attempt.bytes} Bytes</>}</small>
+      </li>)}</ul> : <p>Noch kein Übertragungsversuch erfasst. Nur Anfragen, die diesen Empfänger erreichen, können hier erscheinen.</p>}
     </>}
   </Panel>;
 }

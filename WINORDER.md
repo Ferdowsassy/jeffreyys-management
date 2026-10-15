@@ -77,7 +77,16 @@ Unchanged retries preserve assignment and chef corrections. Changed unassigned
 orders update; changes after assignment return HTTP 409 for chef reconciliation.
 An order number already recorded manually on that date also returns HTTP 409.
 No request body or credential is logged by the receiver. A chef can inspect the
-last successful receipt under **Einstellungen → WinOrder**.
+last successful receipt under **Einstellungen → WinOrder**. The same panel has an
+**Aktualisieren** button and the 20 most recent HTTP POST transfer attempts,
+including rejected authentication and order validation. Each entry shows the
+time, HTTP status, fixed rejection message, authentication result, content type
+and received body size. Credentials, customer data, request bodies and arbitrary
+exception text are never retained in these diagnostics. Only chefs can read the
+list; it is held in memory and cleared by an app-server restart. Requests blocked
+before the receiver (for example by DNS, TLS or the hosting proxy) cannot appear.
+An entry proves that a request reached the endpoint; it does not identify the
+sender. When investigating, match a controlled WinOrder retry to its timestamp.
 
 ## Checks
 
@@ -85,4 +94,7 @@ last successful receipt under **Einstellungen → WinOrder**.
 persistence, duplicate protection, atomic competing claims, role isolation,
 review, release/reassignment, payment handling, encoding, pickup filtering and
 invalid batch rollback. The fixture stores all data in a disposable directory.
+After `npm run build`, `node scripts/winorder-diagnostics-ui.mjs` checks the
+owner's diagnostics refresh, rejection messages, privacy and desktop/mobile layout
+against an isolated local app.
 The remaining integration check is a real send from the restaurant's WinOrder.

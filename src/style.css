@@ -1634,6 +1634,9 @@ button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visibl
 .order-queue-card > .text-button { margin: 0 22px 18px; }
 .winorder-details { display: grid; gap: 8px; }
 .winorder-details dd { margin: 0 0 10px; overflow-wrap: anywhere; font-weight: 600; }
+.winorder-attempts { list-style: none; padding: 0; display: grid; gap: 12px; }
+.winorder-attempts li { padding: 12px; border: 1px solid var(--line); border-radius: 12px; overflow-wrap: anywhere; }
+.winorder-attempts p { margin: 6px 0; }
 
 /* Operations update: readable monthly accounts, planning and touch controls. */
 .period-picker { flex-wrap: wrap; gap: 10px; }
