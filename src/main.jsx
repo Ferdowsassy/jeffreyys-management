@@ -22,6 +22,7 @@ import {
   X,
   Check,
   Activity,
+  Fingerprint,
 } from "lucide-react";
 import { euro, day, sum, hours } from "./finance";
 import { Management, Driver, Schedule, Analytics } from "./pages";
@@ -30,6 +31,7 @@ import {ShiftCorrections} from "./shift-corrections";
 import { InstallApp } from "./install-app";
 import { useDriverLocation } from "./location-sharing";
 import {OrderQueue} from './order-queue';
+import {DeliveryBoard} from './order-details';
 import {AccountSettings,passkeyLogin} from './workspace-access';
 import {periodStats} from '../shared/accounting';
 const DailyStatistics = lazy(() => import("./daily-statistics"));
@@ -368,18 +370,18 @@ function App() {
       </>
     );
   if (!data) return <div className="loading">Daten werden geladen …</div>;
-  const nav =
+  const roleNav =
     user.role === "chef"
       ? chefNav
       : user.role === "kitchen"
         ? [
             ["Tafel", LayoutDashboard],
+            ["Bestellungen", ClipboardList],
             ["Statistik", ChartNoAxesCombined],
             ["Plan", CalendarDays],
             ["Mein Verdienst", Wallet],
             ["Meine Arbeitszeiten", Clock],
             ["Aufgaben", ClipboardList],
-            ["Einstellungen", Settings],
           ]
         : [
             ["Schicht", Clock],
@@ -390,8 +392,8 @@ function App() {
             ["Verdienst", Wallet],
             ["Meine Arbeitszeiten", Clock],
             ["Statistik", ChartNoAxesCombined],
-            ["Einstellungen", Settings],
           ];
+  const nav=[...roleNav,["Mein Zugang",Fingerprint]];
   const current = nav.some((n) => n[0] === page) ? page : nav[0][0];
   const pendingCorrections = (data.shiftRequests || []).filter(r => r.status === "pending").length;
   const demo =
@@ -506,7 +508,7 @@ function App() {
               <span>Kein Live-Betrieb</span>
             </div>
           )}
-          {current==='Einstellungen' && user.role!=='chef' ? <><Title title="Dein Zugang" subtitle="Anmeldung und Benachrichtigungen auf diesem Gerät." /><AccountSettings user={user} notify={notify} /></> : current === 'Bestellungen' ? (
+          {current==='Mein Zugang' ? <><Title title="Mein Zugang" subtitle={`Persönliche Anmeldung und Benachrichtigungen für ${user.name}.`} /><AccountSettings user={user} notify={notify} /></> : current === 'Bestellungen' ? (
             <OrderQueue user={user} data={data} act={act} />
           ) : current === "Meine Arbeitszeiten" ? (
             <><Title title="Meine Arbeitszeiten" subtitle="Schichten prüfen und fehlende Zeiten melden." /><ShiftCorrections user={user} data={data} act={act} /></>
@@ -528,6 +530,7 @@ function App() {
                 notify={notify}
               />
               <Drivers data={data} />
+              <DeliveryBoard data={data} user={user} act={act} />
               <Tasks data={data} act={act} />
             </>
           ) : current === "Plan" ? (

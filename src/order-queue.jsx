@@ -1,10 +1,12 @@
 import React, {useEffect, useState} from 'react';
 import {api, Badge, Empty, Form, Panel, Title} from './main';
 import {euro} from './finance';
+import {OrderDetails,NavigationLinks,DeliveryBoard} from './order-details';
 
 export function OrderQueue({user, data, act}) {
   const [busy, setBusy] = useState(false), [editing, setEditing] = useState(null), [drivers, setDrivers] = useState({});
   const chef = user.role === 'chef';
+  const canClaim = chef || user.role==='driver';
   const orders = (data.availableOrders || []).slice().sort((a,b) => a.createdAt.localeCompare(b.createdAt));
   const active = data.shifts.some(s => s.employeeId === user.id && !s.end);
   const onDuty = data.employees.filter(e => e.role === 'driver' && e.active && data.shifts.some(s => s.employeeId === e.id && !s.end));
@@ -15,28 +17,26 @@ export function OrderQueue({user, data, act}) {
     catch {} finally {setBusy(false);}
   }
   return <>
-    <Title title="Verfügbare Bestellungen" subtitle={chef ? 'Neue Lieferungen freigeben und deinem Team zuordnen.' : 'Wähle deine Lieferungen. Übernommene Bestellungen findest du unter Tour.'} />
-    {!chef && !active && <div className="notice">Bitte zuerst unter Schicht einstempeln, um Bestellungen zu übernehmen.</div>}
+    <Title title="Verfügbare Bestellungen" subtitle={chef ? 'Neue Lieferungen sind sofort für alle Fahrer verfügbar.' : user.role==='kitchen' ? 'Neue Bestellungen und die aktuelle Fahrerzuordnung live sehen.' : 'Wähle deine Lieferungen. Übernommene Bestellungen findest du unter Tour.'} />
+    {user.role==='driver' && !active && <div className="notice">Bitte zuerst unter Schicht einstempeln, um Bestellungen zu übernehmen.</div>}
     <div className="delivery-grid">
       {orders.map(order => <Panel key={order.id} className="order-queue-card" title={'Bestellung '+order.orderNumber}
         subtitle={new Date(order.createdAt).toLocaleTimeString('de-DE',{timeZone:'Europe/Berlin',hour:'2-digit',minute:'2-digit'})+' · WinOrder'}
-        action={<Badge tone={order.status === 'review' ? 'orange' : 'green'}>{order.status === 'review' ? 'Bitte prüfen' : 'Verfügbar'}</Badge>}>
+        action={<Badge tone={order.reviewIssues?.length ? 'orange' : 'green'}>{order.reviewIssues?.length ? 'Verfügbar · Angaben fehlen' : 'Verfügbar'}</Badge>}>
         <p><strong>{order.address || 'Adresse fehlt'}</strong><br />{order.postalCode} {order.city}</p>
         <div className="delivery-amount">{order.amount === null ? 'Betrag prüfen' : euro(order.amount)}
           <small>{order.payment === 'cash' ? 'Bar kassieren' : order.payment === 'online' ? 'Bereits bezahlt' : 'Zahlungsart prüfen: '+(order.paymentLabel || 'fehlt')}</small>
         </div>
-        {chef && order.customerName && <p>{order.customerName}{order.customerPhone ? ' · '+order.customerPhone : ''}</p>}
-        {chef && order.deliveryNotes && <p className="order-notes">{order.deliveryNotes}</p>}
-        {chef && order.articleDescription && <details><summary>Bestellte Artikel</summary><p className="order-notes">{order.articleDescription}</p></details>}
-        {chef && order.reviewIssues?.length > 0 && <p className="notice">{order.reviewIssues.join(' · ')}</p>}
+        <OrderDetails order={order} />
+        <div className="row"><NavigationLinks order={order} /></div>
         {editing === order.id && chef ? <Form initial={{...order,amount:order.amount ?? '',payment:order.payment || ''}}
           fields={[{name:'address',label:'Straße & Hausnummer'}, {name:'postalCode',label:'PLZ',pattern:'[0-9]{5}'}, {name:'city',label:'Ort'},
             {name:'amount',label:'Gesamtbetrag (€)',type:'number',min:0,step:'0.01'},
             {name:'payment',label:'Zahlungsart',options:[{value:'',label:'Bitte wählen'},{value:'cash',label:'Bar kassieren'},{value:'online',label:'Bereits bezahlt'}]}]}
-          submit="Prüfen & freigeben" onSubmit={async v => {
+          submit="Angaben speichern" onSubmit={async v => {
             try {await act('reviewImportedOrder',{id:order.id,...v,amount:Number(v.amount)});setEditing(null);} catch {}
           }} /> : <>
-          {order.status === 'available' && <div className="order-claim">
+          {canClaim && order.status === 'available' && <div className="order-claim">
             {chef && <label>Fahrer<select aria-label={'Fahrer für Bestellung '+order.orderNumber} value={drivers[order.id] || onDuty[0]?.id || ''}
               onChange={e => setDrivers({...drivers,[order.id]:e.target.value})}>
               {!onDuty.length && <option value="">Kein Fahrer im Dienst</option>}
@@ -44,13 +44,14 @@ export function OrderQueue({user, data, act}) {
             </select></label>}
             <button className="primary" disabled={busy || (chef ? !onDuty.length : !active)} onClick={() => claim(order)}>{chef ? 'Fahrer zuordnen' : 'Übernehmen'}</button>
           </div>}
-          {chef && <button className="text-button" onClick={() => setEditing(order.id)}>Angaben prüfen</button>}
+          {chef && <button className="text-button" onClick={() => setEditing(order.id)}>Angaben bearbeiten</button>}
         </>}
       </Panel>)}
     </div>
     {!orders.length && <Empty>{chef ? 'Noch keine verfügbaren WinOrder-Lieferungen.' : 'Aktuell ist keine Bestellung verfügbar. Neue Lieferungen erscheinen hier automatisch.'}</Empty>}
+    <DeliveryBoard data={data} user={user} act={act} />
     {chef && <Panel title="Offene Lieferungen zuordnen" subtitle="Auch manuell erfasste Bestellungen können einem anderen Fahrer im Dienst zugeteilt werden.">
-      <div className="table-wrap"><table><thead><tr><th>Bestellung</th><th>Adresse</th><th>Aktueller Fahrer</th><th>Neu zuordnen</th></tr></thead><tbody>{assigned.map(o=><tr key={o.id}><td>{o.orderNumber}</td><td>{o.address}</td><td>{data.employees.find(e=>e.id===o.employeeId)?.name || '—'}</td><td><form className="order-claim" onSubmit={async e=>{e.preventDefault();setBusy(true);try{await act('assignOrder',{id:o.id,employeeId:drivers[o.id] || o.employeeId});}catch{}finally{setBusy(false);}}}><select aria-label={'Neuer Fahrer für '+o.orderNumber} value={drivers[o.id] || o.employeeId} onChange={e=>setDrivers({...drivers,[o.id]:e.target.value})}>{!onDuty.some(e=>e.id===o.employeeId) && <option value={o.employeeId}>Bitte wählen</option>}{onDuty.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select><button className="secondary" disabled={busy || !onDuty.length || !drivers[o.id] || drivers[o.id]===o.employeeId}>Zuordnen</button></form></td></tr>)}</tbody></table></div>{!assigned.length && <Empty>Keine offenen Lieferungen.</Empty>}
+      <div className="table-wrap"><table><thead><tr><th>Bestellung</th><th>Adresse</th><th>Aktueller Fahrer</th><th>Neu zuordnen</th></tr></thead><tbody>{assigned.map(o=><tr key={o.id}><td>{o.orderNumber}</td><td>{o.address}{o.source==='winorder' && <details><summary>Bestelldetails</summary><OrderDetails order={o} /><div className="row"><NavigationLinks order={o} /></div></details>}</td><td>{data.employees.find(e=>e.id===o.employeeId)?.name || '—'}</td><td><form className="order-claim" onSubmit={async e=>{e.preventDefault();setBusy(true);try{await act('assignOrder',{id:o.id,employeeId:drivers[o.id] || o.employeeId});}catch{}finally{setBusy(false);}}}><select aria-label={'Neuer Fahrer für '+o.orderNumber} value={drivers[o.id] || o.employeeId} onChange={e=>setDrivers({...drivers,[o.id]:e.target.value})}>{!onDuty.some(e=>e.id===o.employeeId) && <option value={o.employeeId}>Bitte wählen</option>}{onDuty.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select><button className="secondary" disabled={busy || !onDuty.length || !drivers[o.id] || drivers[o.id]===o.employeeId}>Zuordnen</button></form></td></tr>)}</tbody></table></div>{!assigned.length && <Empty>Keine offenen Lieferungen.</Empty>}
     </Panel>}
   </>;
 }

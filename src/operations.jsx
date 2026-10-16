@@ -1,4 +1,4 @@
-import React,{useState} from 'react';
+import React,{useState,useEffect,useRef} from 'react';
 import {Panel,Empty,Form,roleName} from './main';
 import {euro,day,hours,formatHours,sum,payroll} from './finance';
 import {berlinDate,shiftDate,dailyEarnings} from '../shared/daily-stats';
@@ -16,6 +16,12 @@ export function MonthPicker({value,onChange,label='Monat'}) {
 export function DataTable({headers,children}){return <div className="table-wrap"><table><thead><tr>{headers.map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>{children}</tbody></table></div>;}
 export function MonthlyPayroll({data,user,personal=false,act}) {
   const [month,setMonth]=useState(monthNow),[detail,setDetail]=useState(null),[payment,setPayment]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
+  const paymentDialog=useRef(null);
+  useEffect(()=>{
+    if (!payment) return;
+    if (!paymentDialog.current?.open) paymentDialog.current?.showModal();
+    paymentDialog.current?.querySelector('input[name="amount"]')?.focus();
+  },[payment?.requestId]);
   const employees=data.employees.filter(e=>personal ? e.id===user.id : !e.archived || data.shifts.some(s=>s.employeeId===e.id && day(s.start).startsWith(month)) || (data.salaryPayments || []).some(p=>p.employeeId===e.id && p.month===month));
   const rows=employees.map(e=>({e,...payroll(e,data,month)}));
   const selectMonth=m=>{setMonth(m);setPayment(null);setError('');};
@@ -31,11 +37,13 @@ export function MonthlyPayroll({data,user,personal=false,act}) {
       {!rows.length && <Empty />}
     <p className="panel-foot">Laufende Schichten und der aktuelle Monat sind vorläufig. Bargeldabgaben werden den ursprünglichen Bestellungen zugeordnet. Negative Beträge bleiben sichtbar.</p>
     </Panel>
-    {payment && <Panel title={'Gehalt ausgezahlt · '+payment.e.name} subtitle={'Abrechnungsmonat '+month+' · offen '+euro(rows.find(r=>r.e.id===payment.e.id)?.balance || 0)} action={<button className="text-button" disabled={busy} onClick={()=>setPayment(null)}>Abbrechen</button>}>
+    {payment && <dialog className="salary-payment-dialog" ref={paymentDialog} aria-labelledby="salary-payment-title" onCancel={event=>{if(busy)event.preventDefault();else setPayment(null);}}>
+      <div className="salary-payment-header"><h2 id="salary-payment-title">Gehalt ausgezahlt · {payment.e.name}</h2><button className="text-button" disabled={busy} onClick={()=>setPayment(null)}>Abbrechen</button></div>
+      <p>Abrechnungsmonat {month} · offen {euro(rows.find(r=>r.e.id===payment.e.id)?.balance || 0)}</p>
       <p>Hier eine tatsächlich erfolgte Zahlung dokumentieren. Es wird keine Überweisung ausgelöst.</p>
       <Form key={payment.requestId} submit="Erfolgte Auszahlung bestätigen" fields={[{name:'amount',label:'Ausgezahlter Betrag (€)',type:'number',min:0.01,max:payment.balance,step:0.01,value:payment.balance},{name:'method',label:'Zahlungsart',options:[{value:'transfer',label:'Überweisung'},{value:'cash',label:'Bar ausgezahlt'}]},{name:'note',label:'Notiz',required:false,maxLength:500}]} onSubmit={async v=>{setBusy(true);try{await act('recordSalaryPayment',{employeeId:payment.e.id,month,requestId:payment.requestId,...v,amount:Number(v.amount)});setPayment(null);}catch(e){setError(e.message);}finally{setBusy(false);}}} />
       {error && <p role="alert">{error}</p>}
-    </Panel>}
+    </dialog>}
     {(detail || personal) && <Panel title={'Arbeitszeit und Bargeld · '+month}>
       <TimeMonthChart data={data} employeeId={personal?user.id:detail} month={month} />
       <DataTable headers={['Tag','Bestellung','Bar kassiert','Status']}>{data.orders.filter(o=>o.employeeId===(personal?user.id:detail) && o.payment==='cash' && day(o.createdAt).startsWith(month)).map(o=><tr key={o.id}><td>{day(o.createdAt)}</td><td>{o.orderNumber}</td><td>{euro(o.amount)}</td><td>{o.status==='delivered'?'Zugestellt':'Offen · noch kein Abzug'}</td></tr>)}</DataTable>

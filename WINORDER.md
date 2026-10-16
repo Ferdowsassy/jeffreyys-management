@@ -56,19 +56,36 @@ Official references:
 
 ## Driver workflow and accounting
 
-Valid delivery orders enter **Bestellungen** without an employee or shift.
+Delivery orders enter **Bestellungen** immediately without an employee or shift.
 Pickup and table orders are acknowledged but do not enter the delivery queue.
 Unknown delivery types, missing totals/addresses and unfamiliar payment labels
-wait for chef review. They are not offered to drivers until the chef checks and
-releases them. Explicit cash and prepaid labels are recognized; card payment at
-the customer's door requires review and must not be assumed prepaid or cash.
+appear as warnings and do not block drivers from claiming the delivery. Existing
+imports previously held for review are also immediately claimable. No chef release
+is required. Explicit cash and prepaid labels are recognized; unfamiliar payment
+labels remain unknown and must not be assumed prepaid or cash. The assigned
+driver can correct missing details under **Tour → Angaben ergänzen**. Amount and
+payment must be known before completion or automatic completion at clock-out, so
+unknown cash values cannot silently enter payroll as zero.
 
 A clocked-in active driver presses **Übernehmen**. The database transaction
 assigns the order to their current shift and snapshots the app's configured zone
 delivery fee. Simultaneous claims have one winner. The order moves to **Tour**,
 where the assigned driver can see customer contact, notes, articles and navigation.
-Other drivers see only their own assigned deliveries plus a limited shared queue.
-The chef may assign an available delivery to a clocked-in driver.
+Chef, kitchen and drivers share the incoming queue and a delivery board showing
+who claimed each order, open deliveries, and today's completions. The kitchen has
+**Bestellungen** and the same board on **Tafel**; claims and completions update via
+the existing live connection. Only drivers and the chef can assign orders. The
+chef can optionally assign a delivery to a clocked-in driver.
+
+Imports retain all business order fields in `winorderDetails`, including delivery
+and billing names/addresses, contact details, quantities, article numbers, sizes,
+prices, toppings and their quantities/prices, comments, taxes, discounts, tips,
+payment references and provider-specific fields. Technical `ServerData` request
+metadata is excluded; its order timestamp is already normalized. The screens show
+articles directly and offer **Alle Bestellangaben** for the remaining transmitted
+fields. Google Maps and Waze actions use the written delivery address. An unchanged
+retry can enrich an older imported order without changing its driver or chef
+corrections; details discarded by an earlier import require such a resend.
 
 An open imported delivery can be returned to the queue before completion; doing
 so removes its shift and driver assignment. Completion and clock-out use the
@@ -80,7 +97,7 @@ The stable import key uses store ID, Berlin order date and WinOrder `OrderID`.
 Unchanged retries preserve assignment and chef corrections. Changed unassigned
 orders update; changes after assignment return HTTP 409 for chef reconciliation.
 An order number already recorded manually on that date also returns HTTP 409.
-No request body or credential is logged by the receiver. A chef can inspect the
+Diagnostics retain no request body or credential. A chef can inspect the
 last successful receipt under **Einstellungen → WinOrder**. The same panel has an
 **Aktualisieren** button and the 20 most recent HTTP POST transfer attempts,
 including rejected authentication and order validation. Each entry shows the
@@ -101,4 +118,7 @@ invalid batch rollback. The fixture stores all data in a disposable directory.
 After `npm run build`, `node scripts/winorder-diagnostics-ui.mjs` checks the
 owner's diagnostics refresh, rejection messages, privacy and desktop/mobile layout
 against an isolated local app.
+`node scripts/order-payments-ui.mjs` checks shared order details, Google Maps/Waze
+address links, automatic driver availability, live kitchen assignments and the
+salary-payment dialog through isolated desktop/mobile browser sessions.
 The remaining integration check is a real send from the restaurant's WinOrder.

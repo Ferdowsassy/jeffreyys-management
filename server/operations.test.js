@@ -70,11 +70,13 @@ test('PDF and invoice routes enforce own-only access and produce a real PDF; new
  const invoice=await fetch(path,{headers:{cookie:chef}});assert.equal(await invoice.text(),'invoice bytes');
  await app.locals.store.close();const restored=await createApp({dataFile:dir+'/db.json',demo:true});try{assert.equal(restored.locals.store.read().expenses[0].amount,5);}finally{await restored.locals.close();}
 });
-test('passkey enrollment and login verify real signatures, require PIN and device verification, and reject replay',async t=>{
- const {request,login,app}=await fixture(t,{origin:'http://localhost:5173'}),cookie=await login('alex','1234');
+for(const [employeeId,pin,role] of [['alex','1234','chef'],['samira','2345','kitchen'],['leo','3456','driver']])
+test('passkeys for '+role+' verify signatures, require own PIN and device verification, and reject replay',async t=>{
+ const {request,login,app}=await fixture(t,{origin:'http://localhost:5173'}),cookie=await login(employeeId,pin);
  assert.equal((await request('/api/passkeys/register/options',{pin:'wrong'},cookie)).status,401);
- const start=await request('/api/passkeys/register/options',{pin:'1234'},cookie);assert.equal(start.status,200);
- const {options,challengeId}=start.body;assert.equal(options.authenticatorSelection.userVerification,'required');
+ assert.equal((await request('/api/passkeys/register/options',{pin})).status,401);
+ const start=await request('/api/passkeys/register/options',{pin},cookie);assert.equal(start.status,200);
+ const {options,challengeId}=start.body;assert.equal(Buffer.from(options.user.id,'base64url').toString(),employeeId);assert.equal(options.authenticatorSelection.userVerification,'required');
  const {privateKey,publicKey}=generateKeyPairSync('ec',{namedCurve:'prime256v1'}),jwk=publicKey.export({format:'jwk'}),id=randomBytes(32),counter=Buffer.alloc(4);
  const cose=isoCBOR.encode(new Map([[1,2],[3,-7],[-1,1],[-2,new Uint8Array(Buffer.from(jwk.x,'base64url'))],[-3,new Uint8Array(Buffer.from(jwk.y,'base64url'))]]));
  const length=Buffer.alloc(2);length.writeUInt16BE(id.length);
@@ -84,13 +86,13 @@ test('passkey enrollment and login verify real signatures, require PIN and devic
  const registered=await request('/api/passkeys/register/verify',{challengeId,response},cookie);assert.equal(registered.status,200,JSON.stringify(registered.body));
  assert.equal((await request('/api/passkeys/register/verify',{challengeId,response},cookie)).status,400);
  const exposed=JSON.stringify((await request('/api/state',undefined,cookie)).body);assert.ok(!exposed.includes('publicKey'));assert.ok(!exposed.includes('passkeys'));
- const auth=await request('/api/passkeys/login/options',{id:'alex'});assert.equal(auth.status,200);
+ const auth=await request('/api/passkeys/login/options',{id:employeeId});assert.equal(auth.status,200);
  const client=Buffer.from(JSON.stringify({type:'webauthn.get',challenge:auth.body.options.challenge,origin:'http://localhost:5173'}));counter.writeUInt32BE(1);
  const assertionData=Buffer.concat([digest('localhost'),Buffer.from([0x05]),counter]);
  const signature=sign('sha256',Buffer.concat([assertionData,digest(client)]),privateKey);
- const assertion={id:id.toString('base64url'),rawId:id.toString('base64url'),type:'public-key',response:{clientDataJSON:client.toString('base64url'),authenticatorData:assertionData.toString('base64url'),signature:signature.toString('base64url'),userHandle:Buffer.from('alex').toString('base64url')},clientExtensionResults:{}};
- const signed=await request('/api/passkeys/login/verify',{challengeId:auth.body.challengeId,response:assertion});assert.equal(signed.status,200,JSON.stringify(signed.body));assert.ok(signed.cookie);
- assert.equal(app.locals.store.read().employees[0].passkeys[0].counter,1);
+ const assertion={id:id.toString('base64url'),rawId:id.toString('base64url'),type:'public-key',response:{clientDataJSON:client.toString('base64url'),authenticatorData:assertionData.toString('base64url'),signature:signature.toString('base64url'),userHandle:Buffer.from(employeeId).toString('base64url')},clientExtensionResults:{}};
+ const signed=await request('/api/passkeys/login/verify',{challengeId:auth.body.challengeId,response:assertion});assert.equal(signed.status,200,JSON.stringify(signed.body));assert.ok(signed.cookie);assert.equal(signed.body.user.id,employeeId);assert.equal(signed.body.user.role,role);
+ assert.equal(app.locals.store.read().employees.find(e=>e.id===employeeId).passkeys[0].counter,1);
  assert.equal((await request('/api/passkeys/login/verify',{challengeId:auth.body.challengeId,response:assertion})).status,400);
 });
 test('push subscription validates endpoints, protects VAPID secrets and unsubscribes on logout',async t=>{

@@ -21,10 +21,11 @@ import {periodStats} from '../shared/accounting';
 import { scanReceipt } from "./receipt-ocr";
 import { summarizeItems } from "./order-items";
 import {WinOrderSettings} from './order-queue';
+import {OrderDetails, NavigationLinks} from './order-details';
 import {ScheduleEditor, ShiftTemplateEditor} from './schedule-editor';
 import {absenceNames, scheduleHours} from '../shared/schedule';
 import {MonthlyPayroll, Expenses, Customers, TimeMonthChart, RevenueTrend} from './operations';
-import {AccountSettings, ClockOut} from './workspace-access';
+import {ClockOut} from './workspace-access';
 const today = () => day(Date.now());
 const person = (data, id) =>
   data.employees.find((e) => e.id === id)?.name || "Unbekannt";
@@ -212,7 +213,7 @@ function OrderTable({ orders, data }) {
       ]}
       rows={orders.map((o) => [
         o.orderNumber || "—",
-        o.noAddress ? "Ohne Adresse · Pauschale" : o.address,
+        o.noAddress ? "Ohne Adresse · Pauschale" : <>{o.address}{o.source==='winorder' && <details><summary>Bestelldetails</summary><OrderDetails order={o} /><div className="row"><NavigationLinks order={o} /></div></details>}</>,
         person(data, o.employeeId),
         euro(o.amount),
         o.payment === "cash" ? "Bar" : "Online",
@@ -442,7 +443,7 @@ export function Management({ user, data, page, act, notify }) {
         </Panel>
       </>
     );
-  if (page === "Einstellungen") body = <><WinOrderSettings data={data} /><StoreSettings data={data} act={act} notify={notify} /><AccountSettings user={user} notify={notify} /></>;
+  if (page === "Einstellungen") body = <><WinOrderSettings data={data} /><StoreSettings data={data} act={act} notify={notify} /></>;
   if (page === "Finanzen")
     body = (<><Expenses data={data} act={act} />
       <Panel
@@ -913,35 +914,20 @@ export function Driver({ user, data, page, act, notify }) {
                 title={i + 1 + ". " + (o.address || "Ohne Adresse")}
                 subtitle={o.postalCode + " " + (o.city || "")}
                 action={
-                  <Badge tone={o.payment === "cash" ? "orange" : "green"}>
-                    {o.payment === "cash" ? "Bar kassieren" : "Online bezahlt"}
+                  <Badge tone={o.payment === "online" ? "green" : "orange"}>
+                    {o.payment === "cash" ? "Bar kassieren" : o.payment==='online' ? "Online bezahlt" : 'Zahlungsart ergänzen'}
                   </Badge>
                 }
               >
                 <div className="delivery-amount">
-                  {euro(o.amount)}
+                  {o.amount===null ? 'Betrag fehlt' : euro(o.amount)}
                   <small>
                     Bestellung {o.orderNumber || "—"} · Liefergeld{" "}
                     {euro(o.deliveryFee)}
                   </small>
                 </div>
                 <div className="row">
-                  {o.address && (
-                    <a
-                      className="secondary"
-                      href={
-                        "https://www.google.com/maps/dir/?api=1&destination=" +
-                        encodeURIComponent(
-                          o.address + ", " + o.postalCode + " " + o.city,
-                        )
-                      }
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <MapPin size={17} />
-                      Maps öffnen
-                    </a>
-                  )}
+                  <NavigationLinks order={o} />
                   <button
                     className="primary"
                     onClick={() =>
@@ -953,10 +939,7 @@ export function Driver({ user, data, page, act, notify }) {
                   </button>
                 </div>
                 {o.source === 'winorder' && <>
-                  {o.customerName && <p>{o.customerName}</p>}
-                  {o.customerPhone && <a className="secondary" href={'tel:'+o.customerPhone}>Kunden anrufen</a>}
-                  {o.deliveryNotes && <p className="order-notes">{o.deliveryNotes}</p>}
-                  {o.articleDescription && <details><summary>Bestellte Artikel</summary><p className="order-notes">{o.articleDescription}</p></details>}
+                  <OrderDetails order={o} act={act} canCorrect />
                   <button className="text-button" onClick={() => act('releaseOrder',{id:o.id}).catch(() => {})}>Zurück zu verfügbaren Bestellungen</button>
                 </>}
               </Panel>

@@ -1,0 +1,32 @@
+{
+  "OrderList": {
+    "CreateDateTime": "2026-01-12T18:00:00+01:00",
+    "Order": {
+      "OrderID": "DETAILS-100",
+      "Customer": {
+        "CustomerNo": "C00077",
+        "DeliveryAddress": {
+          "Title": "Frau", "FirstName": "Erika", "LastName": "Mustermann", "Company": "Büro Nord",
+          "Street": "Teststraße", "HouseNo": "12", "Zip": "80802", "City": "München", "Country": "Deutschland",
+          "PhoneNo": "+49 89123456", "Mobile": "+49 1701234567", "EMail": "erika@example.com",
+          "AddAddress": "2. Stock", "DescriptionOfWay": "Seiteneingang benutzen"
+        },
+        "BillAddress": {"FirstName": "Erika", "LastName": "Mustermann", "Company": "Büro Nord", "Street": "Rechnungsstraße", "HouseNo": "4", "Zip": "80801", "City": "München"}
+      },
+      "StoreData": {"StoreId": "1", "StoreName": "Testfiliale"},
+      "ServerData": {"CreateDateTime": "2026-01-12T18:00:00+01:00", "IpAddress": "192.0.2.10", "Agent": "Test WinOrder"},
+      "AddInfo": {
+        "DeliverType": "Lieferung", "PaymentType": "Barzahlung", "Total": "32.50", "CurrencyStr": "EUR",
+        "DiscountName": "Testgutschein", "DiscountValue": "3.00", "Tip": "2.00", "DeliverLumpSum": "2.00",
+        "PromisedETA": "2026-01-12T19:00:00+01:00", "Comment": "Bitte klingeln", "ContactlessDelivery": "false",
+        "TransactionID": "TEST-PAYMENT-100"
+      },
+      "ArticleList": {"Article": [
+        {"ArticleNo": "B-01", "ArticleName": "Cheeseburger", "ArticleSize": "Groß", "Count": "2", "Price": "12.50", "Tax": "7", "Deposit": "0", "Comment": "Ohne Zwiebeln",
+          "SubArticleList": {"SubArticle": [{"ArticleNo": "E-01", "ArticleName": "Extra Käse", "Count": "2", "Price": "1.50", "Comment": "Gut schmelzen", "Partition": "+"}]}},
+        {"ArticleNo": "P-01", "ArticleName": "Pommes", "Count": "1", "Price": "3.50", "Comment": "Extra knusprig"}
+      ]},
+      "ProviderReference": "TEST-PORTAL-100"
+    }
+  }
+}

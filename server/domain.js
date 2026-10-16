@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { safeEmployee, hashPin, seed } from "./store.js";
 import {absenceNames} from '../shared/schedule.js';
 import {monthlyPayroll} from '../shared/accounting.js';
+import {berlinDate} from '../shared/daily-stats.js';
 export const cents = (value) => Math.round(value * 100);
 const euros = (value) => Math.round(value) / 100;
 export function fail(message, status = 400) {
@@ -83,13 +84,23 @@ const owned = (record, user) => {
     fail("Not your record", 403);
   return record;
 };
+const requireOrderAccounting = order => {
+  if (order.source==='winorder' && (typeof order.amount!=='number' || !Number.isFinite(order.amount) || !['cash','online'].includes(order.payment)))
+    fail('Bitte bei der Bestellung Betrag und Zahlungsart ergänzen. Die Angaben kannst du unter Tour selbst speichern.',409);
+};
 export { payroll } from "../shared/payroll.js";
 const privateTask = (t) => t.visibility === "chef" || t.text?.startsWith("Kundenreaktivierung prüfen:");
 export function filterState(state, user) {
   const s = structuredClone(state);
+  // Previously held imports are immediately claimable too; no release step.
+  for (const order of s.orders) if (order.source==='winorder' && order.status==='review') order.status='available';
   s.employees = s.employees.map(safeEmployee);
   s.payroll = payroll(state);
   s.availableOrders = s.orders.filter(o => ['available', 'review'].includes(o.status));
+  s.deliveryBoard = s.orders.filter(o=>o.source==='winorder' && (o.status==='open' || (o.status==='delivered' && o.deliveredAt && berlinDate(o.deliveredAt)===today())))
+    .map(({id,orderNumber,employeeId,status,createdAt,claimedAt,deliveredAt,address,postalCode,city,amount,payment,paymentLabel,customerName,customerPhone,deliveryNotes,articleDescription,winorderDetails,reviewIssues,source})=>
+      ({id,orderNumber,employeeId,status,createdAt,claimedAt,deliveredAt,address,postalCode,city,amount,payment,paymentLabel,customerName,customerPhone,deliveryNotes,articleDescription,winorderDetails,reviewIssues,source,
+        driverName:state.employees.find(e=>e.id===employeeId)?.name || 'Nicht zugeordnet'}));
   s.settings.routingConfigured = !!(s.settings.geoapifyApiKey || process.env.GEOAPIFY_API_KEY);
   delete s.settings.geoapifyApiKey;
   delete s.settings.googleMapsBrowserKey;
@@ -106,15 +117,11 @@ export function filterState(state, user) {
   s.salaryPayments = s.salaryPayments.filter(p=>p.employeeId===user.id);
   s.settings = { longShiftHours: s.settings.longShiftHours, store:s.settings.store, routingConfigured:s.settings.routingConfigured, receiptMapsConfigured:s.settings.receiptMapsConfigured };
   if (user.role === "driver") {
-    s.availableOrders = s.availableOrders.filter(o => o.status === 'available').map(
-      ({id, orderNumber, address, postalCode, city, amount, payment, createdAt, source}) =>
-        ({id, orderNumber, address, postalCode, city, amount, payment, createdAt, source, status:'available'}));
     s.employees = s.employees.filter((e) => e.id === user.id);
     for (const key of ["orders", "shifts", "schedule", "handoffs", "payroll"])
       s[key] = s[key].filter((x) => x.employeeId === user.id);
     s.tasks = [];
   } else {
-    s.availableOrders = [];
     s.employees = s.employees.map(({ id, name, role, active, demo, hourlyRate, wageHistory, location, phone, returnTrip }) => ({
       id,
       name,
@@ -214,6 +221,7 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
       validateShiftRange(s,user.id,shift.id,shift.start,end);
       if (s.orders.some(o=>o.shiftId===shift.id && Date.parse(o.deliveredAt || o.createdAt)>Date.parse(end)))
         fail('Das Schichtende liegt vor einer erfassten Bestellung oder Zustellung. Bitte einen späteren Zeitpunkt wählen.',409);
+      for (const order of s.orders.filter(o=>o.employeeId===user.id && o.status==='open')) requireOrderAccounting(order);
       for (const order of s.orders.filter(o => o.employeeId === user.id && o.status === "open")) {
         order.status = "delivered";
         order.deliveredAt = end;
@@ -297,7 +305,7 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
     case "claimOrder": {
       requireRole(user, 'driver', 'chef');
       result = lookup(s.orders, p.id);
-      if (result.status !== 'available' || result.employeeId) fail('Diese Bestellung wurde bereits übernommen oder ist noch nicht freigegeben.', 409);
+      if (!(result.status==='available' || (result.source==='winorder' && result.status==='review')) || result.employeeId) fail('Diese Bestellung wurde bereits übernommen oder abgeschlossen.', 409);
       const driverId = user.role === 'chef' ? text(p.employeeId, 'Fahrer') : user.id;
       const driver = lookup(s.employees, driverId);
       if (!driver.active || driver.role !== 'driver') fail('Bitte einen aktiven Fahrer wählen.', 409);
@@ -317,14 +325,15 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
       break;
     }
     case "reviewImportedOrder": {
-      requireRole(user, 'chef');
+      requireRole(user, 'chef', 'driver');
       result = lookup(s.orders, p.id);
-      if (result.source !== 'winorder' || !['review','available'].includes(result.status)) fail('Diese Bestellung kann nicht mehr freigegeben werden.', 409);
+      if (result.source !== 'winorder' || !['review','available','open'].includes(result.status)) fail('Diese Bestellung kann nicht mehr bearbeitet werden.', 409);
+      if (user.role==='driver' && (result.status!=='open' || result.employeeId!==user.id)) fail('Nur selbst übernommene Bestellungen können ergänzt werden.',403);
       if (!['cash','online'].includes(p.payment)) fail('Bitte die Zahlungsart bestätigen.');
       const postalCode = text(p.postalCode, 'PLZ', 5);
       if (!/^\d{5}$/.test(postalCode)) fail('Bitte eine fünfstellige PLZ angeben.');
       Object.assign(result, {address:text(p.address, 'Adresse'), postalCode, city:text(p.city, 'Ort', 100),
-        amount:money(p.amount, 'Betrag'), payment:p.payment, reviewIssues:[], status:'available', reviewedAt:now, reviewedBy:user.id});
+        amount:money(p.amount, 'Betrag'), payment:p.payment, reviewIssues:[], status:result.employeeId ? 'open' : 'available', reviewedAt:now, reviewedBy:user.id});
       break;
     }
     case "addOrder": {
@@ -386,6 +395,7 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
       result = owned(lookup(s.orders, p.id), user);
       if (!['open','delivered'].includes(result.status)) fail('Bitte die Bestellung zuerst einem Fahrer zuordnen.', 409);
       if (result.status !== "delivered") {
+        requireOrderAccounting(result);
         result.status = "delivered";
         result.deliveredAt = now;
       }

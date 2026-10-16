@@ -13,7 +13,7 @@
     "start": "NODE_ENV=production node hostinger.cjs",
     "build": "node scripts/prepare-ocr.mjs && vite build",
     "test": "node --test server/*.test.js src/*.test.js",
-    "test:ui": "node scripts/ui-regressions.mjs all && node scripts/ocr-check.mjs && node scripts/production-ui.mjs && node scripts/features-ui.mjs && node scripts/location-ui.mjs && node scripts/pwa-check.mjs && node scripts/ux-improvements.mjs",
+    "test:ui": "node scripts/ui-regressions.mjs all && node scripts/ocr-check.mjs && node scripts/production-ui.mjs && node scripts/features-ui.mjs && node scripts/location-ui.mjs && node scripts/pwa-check.mjs && node scripts/ux-improvements.mjs && node scripts/winorder-diagnostics-ui.mjs && node scripts/order-payments-ui.mjs",
     "verify": "npm run build && npm test && npm run test:ui"
   },
   "dependencies": {

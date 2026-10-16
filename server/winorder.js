@@ -12,6 +12,15 @@ const scalar = (value, max = 400) => {
   return text;
 };
 const hash = value => createHash('sha256').update(value).digest();
+function canonicalDetails(value, depth=0) {
+  if (depth>30) fail('WinOrder details are nested too deeply');
+  if (Array.isArray(value)) return value.map(entry=>canonicalDetails(entry,depth+1));
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value)
+    .map(([key, value]) => [key === 'StoreId' ? 'StoreID' : key,
+      canonicalDetails(['Article','SubArticle'].includes(key) ? list(value) : value,depth+1)])
+    .sort(([a], [b]) => a.localeCompare(b)));
+  return value === null ? null : String(value).trim();
+}
 export function winorderCredentials(env = process.env) {
   const username = env.WINORDER_USERNAME || '';
   const password = env.WINORDER_PASSWORD || '';
@@ -140,7 +149,12 @@ export function parseWinorder(body, now = new Date().toISOString()) {
       articleDescription:description};
     // A sender may recreate the envelope timestamp on retry. It is not a change
     // to the delivery itself; the source date is already part of externalKey.
-    return {...record, sourceHash:hash(JSON.stringify({...record, createdAt:null})).toString('hex')};
+    // Keep all business order fields, including optional and provider-specific
+    // fields, prices, discounts, customer names and toppings. ServerData is
+    // technical request metadata; its order timestamp is already normalized.
+    const {ServerData, ...winorderDetails} = order;
+    return {...record, winorderDetails,
+      sourceHash:hash(JSON.stringify({...record, createdAt:null, winorderDetails:canonicalDetails(winorderDetails)})).toString('hex')};
   });
 }
 export function importWinorder(state, orders, now = new Date().toISOString()) {
@@ -149,15 +163,25 @@ export function importWinorder(state, orders, now = new Date().toISOString()) {
     if (!order) {results.ignored++; continue;}
     const existing = state.orders.find(o => o.source === 'winorder' && o.externalKey === order.externalKey);
     if (existing) {
+      if (!existing.winorderDetails) {
+        const {winorderDetails, sourceHash, ...legacyRecord} = order;
+        const legacyHash = hash(JSON.stringify({...legacyRecord, createdAt:null})).toString('hex');
+        // An unchanged retry from the earlier parser can enrich an assigned
+        // order without changing its assignment or chef-reviewed values.
+        if (existing.sourceHash === legacyHash) {
+          Object.assign(existing, {winorderDetails, sourceHash});
+          results.duplicates++; continue;
+        }
+      }
       if (existing.sourceHash === order.sourceHash) { results.duplicates++; continue; }
       if (!['available','review'].includes(existing.status)) fail('This WinOrder order was already assigned or closed; review the change with the chef', 409);
-      Object.assign(existing, order, {createdAt:existing.createdAt, status:order.reviewIssues.length ? 'review' : 'available', updatedAt:now});
+      Object.assign(existing, order, {createdAt:existing.createdAt, status:'available', updatedAt:now});
       results.updated++;
     } else {
       if (state.orders.some(o => o.source !== 'winorder' && o.orderNumber === order.orderNumber && berlinDate(o.createdAt) === berlinDate(order.createdAt)))
         fail('This order number was already entered manually today; the chef must resolve the duplicate', 409);
       state.orders.push({...order, id:randomUUID(), employeeId:null, shiftId:null,
-        status:order.reviewIssues.length ? 'review' : 'available', deliveryFee:0,
+        status:'available', deliveryFee:0,
         deliveredAt:null, importedAt:now, items:[], noAddress:false, demo:false});
       results.imported++;
     }

@@ -14,6 +14,7 @@ const messages = new Map([
   ['Duplicate OrderID in WinOrder batch', 'Die Bestellliste enthält eine doppelte Bestellnummer.'],
   ['Invalid WinOrder field', 'Ein Bestellfeld hat einen unerwarteten Datentyp.'],
   ['WinOrder field too long', 'Ein Bestellfeld überschreitet die erlaubte Länge.'],
+  ['WinOrder details are nested too deeply', 'Die Bestelldaten sind zu tief verschachtelt.'],
   ['Too many WinOrder articles', 'Die Bestellung enthält mehr als 100 Artikel.'],
   ['Too many WinOrder toppings', 'Ein Artikel enthält mehr als 100 Zusätze.'],
   ['WinOrder article details too long', 'Die Artikelbeschreibung ist zu lang.'],

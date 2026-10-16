@@ -30,6 +30,14 @@ async function login(name, pin) {
   await page.getByRole('button', { name: 'Anmelden', exact: true }).click();
   await page.locator('.sidebar').waitFor();
 }
+async function checkPersonalAccess() {
+  await page.locator('.sidebar').getByRole('button',{name:'Mein Zugang',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Mein Zugang',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Face ID / Touch ID',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Passkey einrichten',exact:true})).toBeVisible();
+  await expect(page.getByLabel('Aktuelle PIN bestätigen',{exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'WinOrder',exact:true})).toHaveCount(0);
+}
 async function logout() {
   await page.getByRole('button', { name: 'Abmelden' }).click();
   await expect(page.getByText('Schön, dass du da bist.')).toBeVisible();
@@ -50,21 +58,24 @@ async function addEmployee(name, role, pin) {
 
 try {
   await login('Owner', '9876543210');
+  await checkPersonalAccess();
   await addEmployee('Kitchen Test', 'kitchen', '11112222');
   await addEmployee('Driver Test', 'driver', '33334444');
   await logout();
 
   await login('Kitchen Test', '11112222');
+  await checkPersonalAccess();
   await expect(page.getByRole('button', { name: /Aufgaben/ })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Team', exact: true })).toHaveCount(0);
   await logout();
 
   await login('Driver Test', '33334444');
+  await checkPersonalAccess();
   await expect(page.getByRole('button', { name: 'Schicht', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Team', exact: true })).toHaveCount(0);
   await page.screenshot({ path: evidence + '/production-roles.png', fullPage: true });
   if (errors.length) throw new Error(errors.join('\n'));
-  console.log('PASS production bootstrap and chef/kitchen/driver role flows');
+  console.log('PASS production bootstrap, roles and personal Face ID/passkey access for chef/kitchen/driver');
 } finally {
   await context.tracing.stop({ path: evidence + '/production-roles-trace.zip' });
   await browser.close();

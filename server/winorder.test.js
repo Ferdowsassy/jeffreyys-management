@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
 import {fixture} from './test-helper.js';
 import {parseWinorder, winorderCredentials} from './winorder.js';
 
@@ -15,7 +16,7 @@ function sender(base) {
     return {status:response.status, body:await response.json()};
   };
 }
-test('WinOrder parser preserves identifiers, address, totals, notes and Berlin timestamps; requires review for unknown payments', () => {
+test('WinOrder parser preserves identifiers, address, totals, notes and Berlin timestamps; flags unknown payments', () => {
   const [order] = parseWinorder(Buffer.from(winorderSample('00001', {timestamp:'2026-01-12T18:00:00+01:00'})));
   assert.equal(order.orderNumber,'00001'); assert.equal(order.amount,25.5);
   assert.equal(order.address,'Teststraße 12'); assert.equal(order.customerPhone,'089123456');
@@ -92,8 +93,8 @@ test('authenticated WinOrder imports persist once, expose a safe shared queue an
   const driver=await login('leo','3456'), chef=await login('alex','1234'), kitchen=await login('samira','2345');
   const view = (await request('/api/state',undefined,driver)).body;
   assert.equal(view.availableOrders.length,1); assert.equal(view.orders.some(o=>o.source==='winorder'),false);
-  assert.equal(view.availableOrders[0].customerPhone,undefined); assert.equal(view.availableOrders[0].customerName,undefined);
-  assert.equal((await request('/api/state',undefined,kitchen)).body.availableOrders.length,0);
+  assert.equal(view.availableOrders[0].customerPhone,'089123456'); assert.equal(view.availableOrders[0].customerName,'Test Kunde');
+  assert.equal((await request('/api/state',undefined,kitchen)).body.availableOrders.length,1);
   assert.equal((await request('/api/integrations/winorder',undefined,kitchen)).status,403);
   const settings=(await request('/api/integrations/winorder',undefined,chef)).body;
   assert.equal(settings.configured,true); assert.equal(settings.password,undefined); assert.ok(settings.lastReceivedAt);
@@ -131,15 +132,25 @@ test('two simultaneous driver claims have one winner and only the winner can fin
   const order=view.orders.find(o=>o.id===id), pay=view.payroll[0];
   assert.equal(order.status,'delivered'); assert.ok(pay.deliveryPay>=2.5); assert.ok(pay.collectedCash>=25.5);
 });
-test('unknown fields stay in chef review; JSON and Latin-1 work; invalid batches roll back; pickups are ignored', async t => {
+test('incomplete imports are immediately claimable; assigned drivers can correct them without chef approval', async t => {
   const {base, request, login, app} = await fixture(t,{winorder:credentials}), send=sender(base);
   await send(winorderSample('REVIEW',{payment:'unbekannt',amount:''}));
-  const chef=await login('alex','1234'), driver=await login('leo','3456');
+  const chef=await login('alex','1234'), driver=await login('leo','3456'), other=await login('mia','4567'), kitchen=await login('samira','2345');
   const order=app.locals.store.read().orders.find(o=>o.orderNumber==='REVIEW');
-  assert.equal(order.status,'review'); assert.equal((await request('/api/state',undefined,driver)).body.availableOrders.length,0);
-  assert.equal((await request('/api/action',{type:'claimOrder',id:order.id},driver)).status,409);
-  assert.equal((await request('/api/action',{type:'reviewImportedOrder',id:order.id,address:'Teststraße 12',postalCode:'80802',city:'München',amount:25.5,payment:'cash'},chef)).status,200);
-  assert.equal((await request('/api/state',undefined,driver)).body.availableOrders.length,1);
+  assert.equal(order.status,'available'); assert.equal((await request('/api/state',undefined,driver)).body.availableOrders.length,1);
+  assert.equal((await request('/api/action',{type:'claimOrder',id:order.id},driver)).status,200);
+  const board=(await request('/api/state',undefined,kitchen)).body.deliveryBoard.find(o=>o.id===order.id);
+  assert.equal(board.driverName,'Leo'); assert.equal(board.employeeId,'leo'); assert.equal(board.status,'open');
+  assert.equal(board.deliveryFee,undefined); assert.equal(board.customerName,'Test Kunde');
+  assert.equal((await request('/api/action',{type:'delivered',id:order.id},driver)).status,409);
+  assert.equal((await request('/api/action',{type:'clockOut'},driver)).status,409);
+  const correction={type:'reviewImportedOrder',id:order.id,address:'Teststraße 12',postalCode:'80802',city:'München',amount:25.5,payment:'cash'};
+  for(const cookie of [other,kitchen])assert.equal((await request('/api/action',correction,cookie)).status,403);
+  assert.equal((await request('/api/action',correction,driver)).status,200);
+  const corrected=app.locals.store.read().orders.find(o=>o.id===order.id);
+  assert.equal(corrected.status,'open'); assert.equal(corrected.employeeId,'leo');
+  assert.equal((await request('/api/action',{type:'delivered',id:order.id},driver)).status,200);
+  assert.equal((await request('/api/state',undefined,driver)).body.availableOrders.length,0);
   // An unchanged retransmission must preserve the chef's correction.
   assert.equal((await send(winorderSample('REVIEW',{timestamp:order.createdAt,payment:'unbekannt',amount:''}))).body.data.duplicates,1);
   const latin=Buffer.from(winorderSample('LATIN').replace('UTF-8','ISO-8859-1'),'latin1');
@@ -212,4 +223,55 @@ test('diagnostics retain only twenty attempts and do not reflect arbitrary error
   assert.equal(JSON.stringify(attempts).includes('private'),false);
   // Diagnostics are process-local and never written to the business store.
   assert.equal(JSON.stringify(app.locals.store.read()).includes('winorderAttempt'),false);
+});
+
+test('all business order details persist, are shared with the team, and price-only changes are detected', async t => {
+  const {base,request,login,app,dir}=await fixture(t,{winorder:credentials});
+  const sample=JSON.parse(await readFile(new URL('../scripts/fixtures/winorder-detailed.json',import.meta.url),'utf8'));
+  const send=()=>sender(base)(JSON.stringify(sample),{contentType:'application/json'});
+  assert.equal((await send()).body.data.imported,1);
+  const driver=await login('leo','3456'), kitchen=await login('samira','2345');
+  for(const cookie of [driver,kitchen]) {
+    const queue=(await request('/api/state',undefined,cookie)).body.availableOrders;
+    assert.equal(queue[0].customerName,'Erika Mustermann');
+    assert.equal(queue[0].winorderDetails.Customer.BillAddress.Street,'Rechnungsstraße');
+    assert.equal(queue[0].winorderDetails.ArticleList.Article[0].SubArticleList.SubArticle[0].Price,'1.50');
+    assert.equal(queue[0].winorderDetails.AddInfo.DiscountValue,'3.00');
+    assert.equal(queue[0].winorderDetails.AddInfo.Tip,'2.00');
+    assert.equal(queue[0].winorderDetails.ProviderReference,'TEST-PORTAL-100');
+    assert.equal(queue[0].winorderDetails.ServerData,undefined);
+  }
+  sample.OrderList.Order.ArticleList.Article[0].Price='13.00';
+  assert.equal((await send()).body.data.updated,1);
+  const order=app.locals.store.read().orders.find(o=>o.source==='winorder');
+  assert.equal(order.amount,32.5); assert.deepEqual(order.items,[]); // Do not invent reconciled article revenue.
+  assert.equal((await request('/api/action',{type:'claimOrder',id:order.id},driver)).status,200);
+  const shared=(await request('/api/state',undefined,kitchen)).body.deliveryBoard.find(o=>o.id===order.id);
+  assert.equal(shared.driverName,'Leo'); assert.equal(shared.winorderDetails.ArticleList.Article[0].Price,'13.00');
+  const persisted=JSON.parse(await readFile(dir+'/db.json','utf8')).orders.find(o=>o.id===order.id);
+  assert.equal(persisted.winorderDetails.Customer.DeliveryAddress.EMail,'erika@example.com');
+  sample.OrderList.Order.ArticleList.Article[0].Price='14.00';
+  assert.equal((await send()).status,409);
+});
+
+test('unchanged retries enrich legacy assigned orders without changing chef corrections; old review orders need no release', async t => {
+  const {base,request,login,app}=await fixture(t,{winorder:credentials});
+  const send=sender(base), xml=winorderSample('LEGACY');
+  assert.equal((await send(xml)).status,200);
+  const driver=await login('leo','3456'), kitchen=await login('samira','2345');
+  const imported=app.locals.store.read().orders.find(o=>o.orderNumber==='LEGACY');
+  const [parsed]=parseWinorder(Buffer.from(xml));
+  const {winorderDetails,sourceHash,...oldRecord}=parsed;
+  const oldHash=createHash('sha256').update(JSON.stringify({...oldRecord,createdAt:null})).digest('hex');
+  await app.locals.store.transact(state=>{
+    const order=state.orders.find(o=>o.id===imported.id);
+    order.status='review';delete order.winorderDetails;order.sourceHash=oldHash;
+  });
+  assert.equal((await request('/api/state',undefined,kitchen)).body.availableOrders[0].status,'available');
+  assert.equal((await request('/api/action',{type:'claimOrder',id:imported.id},driver)).status,200);
+  await app.locals.store.transact(state=>{state.orders.find(o=>o.id===imported.id).amount=20;});
+  assert.equal((await send(xml)).body.data.duplicates,1);
+  const enriched=app.locals.store.read().orders.find(o=>o.id===imported.id);
+  assert.equal(enriched.amount,20); assert.equal(enriched.employeeId,'leo'); assert.equal(enriched.status,'open');
+  assert.ok(enriched.winorderDetails.Customer.DeliveryAddress); assert.equal(enriched.sourceHash,sourceHash);
 });

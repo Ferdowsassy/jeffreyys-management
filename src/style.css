@@ -1627,6 +1627,31 @@ button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visibl
 .panel > .toolbar { margin-inline: 23px; }
 @media (max-width: 600px) { .earnings-body, .return-body { padding: 0 16px 16px; } }
 .order-notes { white-space: pre-wrap; overflow-wrap: anywhere; }
+.imported-order-details { padding: 0 23px 20px; overflow-wrap: anywhere; font-size: 14px; }
+.imported-order-details h3 { font-size: 15px; margin: 14px 0 8px; }
+.imported-order-details p { margin: 8px 0; }
+.order-contact-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.order-article-list, .order-article-list ul { list-style: none; padding-left: 0; display: grid; gap: 10px; }
+.order-article-list > li { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.order-article-list ul { margin: 8px 0 0 14px; }
+.order-article-list small, .order-item-price { display: block; margin-top: 4px; }
+.order-all-details { margin-top: 16px; }
+.order-source-fields { margin: 8px 0; }
+.order-source-fields > div { padding: 6px 0; }
+.order-source-fields dt { font-weight: 600; }
+.order-source-fields dd { margin: 4px 0 0 12px; overflow-wrap: anywhere; }
+.delivery-board { margin: 24px 0; }
+.delivery-board > h2 { margin-bottom: 16px; }
+.delivery-board-card { border: 1px solid var(--line); border-radius: 12px; padding: 18px; background: white; overflow-wrap: anywhere; }
+.delivery-board-card h3 { font-size: 16px; }
+.delivery-board-card > p { margin: 8px 0; font-size: 14px; }
+.delivery-board-card .imported-order-details { padding: 0; }
+.salary-payment-dialog { border: 1px solid var(--line); border-radius: 16px; padding: 24px; width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; color: inherit; }
+.salary-payment-dialog::backdrop { background: #0007; }
+.salary-payment-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.salary-payment-header h2 { font-size: 20px; }
+.salary-payment-dialog .form-grid { padding: 16px 0 0; }
+.salary-payment-dialog > p { margin-top: 12px; font-size: 14px; }
 .order-claim { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 14px 0; }
 .order-claim label { display: grid; gap: 6px; flex: 1; min-width: 140px; }
 .order-queue-card > p, .order-queue-card > details { margin: 16px 22px; }
