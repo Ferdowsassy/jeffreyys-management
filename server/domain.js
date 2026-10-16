@@ -97,10 +97,10 @@ export function filterState(state, user) {
   s.employees = s.employees.map(safeEmployee);
   s.payroll = payroll(state);
   s.availableOrders = s.orders.filter(o => ['available', 'review'].includes(o.status));
-  s.deliveryBoard = s.orders.filter(o=>o.source==='winorder' && (o.status==='open' || (o.status==='delivered' && o.deliveredAt && berlinDate(o.deliveredAt)===today())))
+  s.deliveryBoard = user.role==='chef' ? s.orders.filter(o=>o.source==='winorder' && (o.status==='open' || (o.status==='delivered' && o.deliveredAt && berlinDate(o.deliveredAt)===today())))
     .map(({id,orderNumber,employeeId,status,createdAt,claimedAt,deliveredAt,address,postalCode,city,amount,payment,paymentLabel,customerName,customerPhone,deliveryNotes,articleDescription,winorderDetails,reviewIssues,source})=>
       ({id,orderNumber,employeeId,status,createdAt,claimedAt,deliveredAt,address,postalCode,city,amount,payment,paymentLabel,customerName,customerPhone,deliveryNotes,articleDescription,winorderDetails,reviewIssues,source,
-        driverName:state.employees.find(e=>e.id===employeeId)?.name || 'Nicht zugeordnet'}));
+        driverName:state.employees.find(e=>e.id===employeeId)?.name || 'Nicht zugeordnet'})) : [];
   s.settings.routingConfigured = !!(s.settings.geoapifyApiKey || process.env.GEOAPIFY_API_KEY);
   delete s.settings.geoapifyApiKey;
   delete s.settings.googleMapsBrowserKey;

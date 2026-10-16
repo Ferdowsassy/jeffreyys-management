@@ -82,6 +82,7 @@ export function OrderDetails({order,act,canCorrect=false}) {
 }
 
 export function DeliveryBoard({data,user,act}) {
+  if (user.role!=='chef') return null;
   const orders=(data.deliveryBoard || []).slice().sort((a,b)=>(b.claimedAt || b.createdAt).localeCompare(a.claimedAt || a.createdAt));
   return <section className="delivery-board" aria-label="Lieferübersicht"><h2>Wer liefert welche Bestellung?</h2>
     {!orders.length ? <p>Noch keine Lieferungen übernommen.</p> : <div className="delivery-grid">{orders.map(order=><article className="delivery-board-card" key={order.id}>

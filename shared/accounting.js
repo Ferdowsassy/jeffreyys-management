@@ -1,4 +1,4 @@
-import {berlinDate, dayStart, shiftDate} from './daily-stats.js';
+import {berlinDate, dayStart, shiftDate, shiftsById, orderWorkDate} from './daily-stats.js';
 import {payroll} from './payroll.js';
 
 export function periodRange(mode, value) {
@@ -11,18 +11,23 @@ export function periodRange(mode, value) {
 }
 
 // Returns belong to the original cash orders, even when cash is handed in later.
-// Distribute a shift's returned cash proportionally across its order months.
+// Earnings and their cash deductions belong to the shift's Berlin start date.
+// Legacy orders without a matching shift retain their receipt date.
 export function monthlyPayroll(employee, data, month, now=Date.now()) {
-  const {from,to}=periodRange('month',month);
-  const shifts=data.shifts.filter(s=>s.employeeId===employee.id && Date.parse(s.start)<to && Date.parse(s.end || new Date(now).toISOString())>from)
-    .map(s=>({...s,start:new Date(Math.max(from,Date.parse(s.start))).toISOString(),end:new Date(Math.min(to,Date.parse(s.end || new Date(now).toISOString()),now)).toISOString()}));
-  const orders=data.orders.filter(o=>o.employeeId===employee.id && berlinDate(o.createdAt).startsWith(month));
+  periodRange('month',month);
+  const shiftIndex=shiftsById(data.shifts);
+  const workDate=order=>orderWorkDate(order,shiftIndex);
+  const shifts=data.shifts.filter(s=>s.employeeId===employee.id && berlinDate(s.start).startsWith(month))
+    .map(s=>({...s,end:new Date(Math.min(Date.parse(s.end || new Date(now).toISOString()),now)).toISOString()}));
+  const orders=data.orders.filter(o=>o.employeeId===employee.id && workDate(o).startsWith(month));
   const handoffs=data.handoffs.filter(h=>h.employeeId===employee.id).map(h=>{
     const cash=data.orders.filter(o=>o.employeeId===employee.id && o.shiftId===h.shiftId && o.status==='delivered' && o.payment==='cash');
     const total=cash.reduce((n,o)=>n+Math.round(o.amount*100),0);
-    const part=cash.filter(o=>berlinDate(o.createdAt).startsWith(month)).reduce((n,o)=>n+Math.round(o.amount*100),0);
-    const prior=cash.filter(o=>berlinDate(o.createdAt).slice(0,7)<month).reduce((n,o)=>n+Math.round(o.amount*100),0);
-    const allocate=value=>total ? (Math.round(Math.round(value*100)*(prior+part)/total)-Math.round(Math.round(value*100)*prior/total))/100 : berlinDate(h.createdAt).startsWith(month)?value:0;
+    const part=cash.filter(o=>workDate(o).startsWith(month)).reduce((n,o)=>n+Math.round(o.amount*100),0);
+    const prior=cash.filter(o=>workDate(o).slice(0,7)<month).reduce((n,o)=>n+Math.round(o.amount*100),0);
+    const shift=shiftIndex.get(h.shiftId);
+    const handoffDate=berlinDate(shift && shift.employeeId===h.employeeId ? shift.start : h.createdAt);
+    const allocate=value=>total ? (Math.round(Math.round(value*100)*(prior+part)/total)-Math.round(Math.round(value*100)*prior/total))/100 : handoffDate.startsWith(month)?value:0;
     return {...h,expected:allocate(h.expected),counted:h.counted===null ? null : allocate(h.counted)};
   });
   const p=payroll({employees:[employee],shifts,orders,handoffs},now)[0];
@@ -35,8 +40,10 @@ export function periodStats(data,user,mode,value,now=Date.now()) {
   const orders=data.orders.filter(o=>['open','delivered','available'].includes(o.status) && inRange(o.createdAt) && (user.role!=='driver' || o.employeeId===user.id));
   const employees=user.role==='chef' ? data.employees : data.employees.filter(e=>e.id===user.id);
   const ownIds=new Set(employees.map(e=>e.id));
-  const scoped={...data,employees,orders:data.orders.filter(o=>ownIds.has(o.employeeId) && inRange(o.createdAt)),shifts:data.shifts.filter(s=>ownIds.has(s.employeeId) && Date.parse(s.start)<range.to && Date.parse(s.end || new Date(now).toISOString())>range.from)
-    .map(s=>({...s,start:new Date(Math.max(range.from,Date.parse(s.start))).toISOString(),end:new Date(Math.min(range.to,Date.parse(s.end || new Date(now).toISOString()),now)).toISOString()}))};
+  const shiftIndex=shiftsById(data.shifts);
+  const earnedInRange=order=>{const date=dayStart(orderWorkDate(order,shiftIndex));return date>=range.from && date<range.to;};
+  const scoped={...data,employees,orders:data.orders.filter(o=>ownIds.has(o.employeeId) && earnedInRange(o)),shifts:data.shifts.filter(s=>ownIds.has(s.employeeId) && inRange(s.start))
+    .map(s=>({...s,end:new Date(Math.min(Date.parse(s.end || new Date(now).toISOString()),now)).toISOString()}))};
   const staff=payroll(scoped,now);
   const revenue=orders.reduce((n,o)=>n+Math.round((o.amount || 0)*100),0)/100;
   const cash=orders.filter(o=>o.payment==='cash').reduce((n,o)=>n+Math.round((o.amount || 0)*100),0)/100;

@@ -139,9 +139,10 @@ test('incomplete imports are immediately claimable; assigned drivers can correct
   const order=app.locals.store.read().orders.find(o=>o.orderNumber==='REVIEW');
   assert.equal(order.status,'available'); assert.equal((await request('/api/state',undefined,driver)).body.availableOrders.length,1);
   assert.equal((await request('/api/action',{type:'claimOrder',id:order.id},driver)).status,200);
-  const board=(await request('/api/state',undefined,kitchen)).body.deliveryBoard.find(o=>o.id===order.id);
+  const board=(await request('/api/state',undefined,chef)).body.deliveryBoard.find(o=>o.id===order.id);
   assert.equal(board.driverName,'Leo'); assert.equal(board.employeeId,'leo'); assert.equal(board.status,'open');
   assert.equal(board.deliveryFee,undefined); assert.equal(board.customerName,'Test Kunde');
+  for(const cookie of [driver,other,kitchen])assert.deepEqual((await request('/api/state',undefined,cookie)).body.deliveryBoard,[]);
   assert.equal((await request('/api/action',{type:'delivered',id:order.id},driver)).status,409);
   assert.equal((await request('/api/action',{type:'clockOut'},driver)).status,409);
   const correction={type:'reviewImportedOrder',id:order.id,address:'Teststraße 12',postalCode:'80802',city:'München',amount:25.5,payment:'cash'};
@@ -246,7 +247,8 @@ test('all business order details persist, are shared with the team, and price-on
   const order=app.locals.store.read().orders.find(o=>o.source==='winorder');
   assert.equal(order.amount,32.5); assert.deepEqual(order.items,[]); // Do not invent reconciled article revenue.
   assert.equal((await request('/api/action',{type:'claimOrder',id:order.id},driver)).status,200);
-  const shared=(await request('/api/state',undefined,kitchen)).body.deliveryBoard.find(o=>o.id===order.id);
+  const chef=await login('alex','1234');
+  const shared=(await request('/api/state',undefined,chef)).body.deliveryBoard.find(o=>o.id===order.id);
   assert.equal(shared.driverName,'Leo'); assert.equal(shared.winorderDetails.ArticleList.Article[0].Price,'13.00');
   const persisted=JSON.parse(await readFile(dir+'/db.json','utf8')).orders.find(o=>o.id===order.id);
   assert.equal(persisted.winorderDetails.Customer.DeliveryAddress.EMail,'erika@example.com');

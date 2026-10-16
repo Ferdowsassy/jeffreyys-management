@@ -31,7 +31,6 @@ import {ShiftCorrections} from "./shift-corrections";
 import { InstallApp } from "./install-app";
 import { useDriverLocation } from "./location-sharing";
 import {OrderQueue} from './order-queue';
-import {DeliveryBoard} from './order-details';
 import {AccountSettings,passkeyLogin} from './workspace-access';
 import {periodStats} from '../shared/accounting';
 const DailyStatistics = lazy(() => import("./daily-statistics"));
@@ -530,7 +529,6 @@ function App() {
                 notify={notify}
               />
               <Drivers data={data} />
-              <DeliveryBoard data={data} user={user} act={act} />
               <Tasks data={data} act={act} />
             </>
           ) : current === "Plan" ? (

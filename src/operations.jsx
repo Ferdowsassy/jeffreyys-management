@@ -1,7 +1,7 @@
 import React,{useState,useEffect,useRef} from 'react';
 import {Panel,Empty,Form,roleName} from './main';
 import {euro,day,hours,formatHours,sum,payroll} from './finance';
-import {berlinDate,shiftDate,dailyEarnings} from '../shared/daily-stats';
+import {berlinDate,shiftDate,dailyEarnings,shiftsById,orderWorkDate} from '../shared/daily-stats';
 import {periodRange,periodStats} from '../shared/accounting';
 import EarningsWeek from './earnings-week';
 
@@ -24,6 +24,7 @@ export function MonthlyPayroll({data,user,personal=false,act}) {
   },[payment?.requestId]);
   const employees=data.employees.filter(e=>personal ? e.id===user.id : !e.archived || data.shifts.some(s=>s.employeeId===e.id && day(s.start).startsWith(month)) || (data.salaryPayments || []).some(p=>p.employeeId===e.id && p.month===month));
   const rows=employees.map(e=>({e,...payroll(e,data,month)}));
+  const shiftIndex=shiftsById(data.shifts);
   const selectMonth=m=>{setMonth(m);setPayment(null);setError('');};
   const exportCsv=()=>save('abrechnung-'+month+'.csv','\ufeff'+[['Name','Rolle','Arbeitszeit','Lohn','Liefergeld','Bar kassiert','Bargeld zurück','Bargeldabzug','Auszahlung vor Zahlungen','Ausgezahlt','Offen'],...rows.map(r=>[r.e.name,roleName[r.e.role],formatHours(r.hours),r.wages,r.fees,r.cash,r.returned,r.retained,r.payout,r.paid,r.balance])].map(r=>r.map(csvCell).join(';')).join('\n'),'text/csv');
   return <>
@@ -35,7 +36,7 @@ export function MonthlyPayroll({data,user,personal=false,act}) {
         <tr className="total-row"><td>Gesamt</td><td>{formatHours(sum(rows,r=>r.hours))}</td><td>{euro(sum(rows,r=>r.wages))}</td><td>{euro(sum(rows,r=>r.fees))}</td><td>{euro(sum(rows,r=>r.retained))}</td><td>{euro(sum(rows,r=>r.paid))}</td><td>{euro(sum(rows,r=>r.balance))}</td><td /></tr>
       </DataTable>}
       {!rows.length && <Empty />}
-    <p className="panel-foot">Laufende Schichten und der aktuelle Monat sind vorläufig. Bargeldabgaben werden den ursprünglichen Bestellungen zugeordnet. Negative Beträge bleiben sichtbar.</p>
+    <p className="panel-foot">Schichten einschließlich der Stunden nach Mitternacht zählen zum Tag und Monat des Schichtbeginns in Berlin. Laufende Schichten sind vorläufig. Bargeldabgaben werden dem ursprünglichen Schichttag zugeordnet. Negative Beträge bleiben sichtbar.</p>
     </Panel>
     {payment && <dialog className="salary-payment-dialog" ref={paymentDialog} aria-labelledby="salary-payment-title" onCancel={event=>{if(busy)event.preventDefault();else setPayment(null);}}>
       <div className="salary-payment-header"><h2 id="salary-payment-title">Gehalt ausgezahlt · {payment.e.name}</h2><button className="text-button" disabled={busy} onClick={()=>setPayment(null)}>Abbrechen</button></div>
@@ -46,7 +47,7 @@ export function MonthlyPayroll({data,user,personal=false,act}) {
     </dialog>}
     {(detail || personal) && <Panel title={'Arbeitszeit und Bargeld · '+month}>
       <TimeMonthChart data={data} employeeId={personal?user.id:detail} month={month} />
-      <DataTable headers={['Tag','Bestellung','Bar kassiert','Status']}>{data.orders.filter(o=>o.employeeId===(personal?user.id:detail) && o.payment==='cash' && day(o.createdAt).startsWith(month)).map(o=><tr key={o.id}><td>{day(o.createdAt)}</td><td>{o.orderNumber}</td><td>{euro(o.amount)}</td><td>{o.status==='delivered'?'Zugestellt':'Offen · noch kein Abzug'}</td></tr>)}</DataTable>
+      <DataTable headers={['Schichttag','Bestellung','Bar kassiert','Status']}>{data.orders.filter(o=>o.employeeId===(personal?user.id:detail) && o.payment==='cash' && orderWorkDate(o,shiftIndex).startsWith(month)).map(o=><tr key={o.id}><td>{orderWorkDate(o,shiftIndex)}</td><td>{o.orderNumber}</td><td>{euro(o.amount)}</td><td>{o.status==='delivered'?'Zugestellt':'Offen · noch kein Abzug'}</td></tr>)}</DataTable>
     </Panel>}
     <Panel title="Erfasste Gehaltszahlungen"><DataTable headers={['Mitarbeiter','Datum','Zahlungsart','Betrag','Notiz']}>{(data.salaryPayments || []).filter(p=>p.month===month && (!personal || p.employeeId===user.id)).map(p=><tr key={p.id}><td>{data.employees.find(e=>e.id===p.employeeId)?.name || 'Mitarbeiter'}</td><td>{day(p.createdAt)}</td><td>{p.method==='cash'?'Bar':'Überweisung'}</td><td>{euro(p.amount)}</td><td>{p.note || '—'}</td></tr>)}</DataTable></Panel>
     {!personal && <Panel title="Bargeldabgaben prüfen" subtitle="Tatsächlich abgegebenes Bargeld bestätigen. Dadurch sinkt der Bargeldabzug in der ursprünglichen Monatsabrechnung.">
@@ -63,7 +64,7 @@ export function TimeMonthChart({data,employeeId=null,month:given}) {
   const max=Math.max(1,...values.map(v=>v.value));
   return <div className="time-month"><h3>Arbeitszeit im Monat</h3>{!given && <div className="toolbar"><MonthPicker value={month} onChange={setMonth} /><label>Mitarbeiter<select aria-label="Arbeitszeit Mitarbeiter" value={person} onChange={e=>setPerson(e.target.value)}><option value="all">Gesamtes Team</option>{data.employees.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select></label></div>}
     <div className="month-bars" aria-label={'Arbeitszeit '+selected}>{values.map(v=><div key={v.label}><span title={formatHours(v.value)} style={{height:Math.max(2,v.value/max*140)+'px'}} /><small>{v.label}</small></div>)}</div>
-    <p><strong>{formatHours(sum(values,v=>v.value))}</strong> · {selected} · Tagesgrenzen Berlin</p>
+    <p><strong>{formatHours(sum(values,v=>v.value))}</strong> · {selected} · Schichtbeginn in Berlin</p>
     <details><summary>Tageswerte anzeigen</summary><DataTable headers={['Tag','Arbeitszeit']}>{values.map(v=><tr key={v.label}><td>{v.label+'.'+selected.slice(5)}</td><td>{formatHours(v.value)}</td></tr>)}</DataTable></details>
   </div>;
 }

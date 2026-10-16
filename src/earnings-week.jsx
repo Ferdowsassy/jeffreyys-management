@@ -50,7 +50,7 @@ export default function EarningsWeek({user, data, date, onDateChange}) {
       <dl><div><dt>Arbeitszeit</dt><dd>{formatHours(chosen.hours)}</dd></div><div><dt>Lohn</dt><dd>{euro(chosen.wages)}</dd></div><div><dt>Liefergeld</dt><dd>{euro(chosen.fees)}</dd></div></dl>
       {chosen.hours===0 && chosen.fees===0 && <p className="muted">Für diesen Tag ist noch kein Verdienst erfasst.</p>}
     </div>
-    <details className="earnings-help"><summary>Wie wird der Verdienst berechnet?</summary><p>Lohn + Liefergeld zugestellter Bestellungen, vor Bargeldabzug. Arbeitszeit wird am Tageswechsel aufgeteilt. Liefergeld zählt zum Tag der Belegerfassung. Laufende Schichten sind vorläufig; die Auszahlung findest du in der Monatsabrechnung.</p></details>
+    <details className="earnings-help"><summary>Wie wird der Verdienst berechnet?</summary><p>Lohn + Liefergeld zugestellter Bestellungen, vor Bargeldabzug. Die gesamte Schicht zählt zum Tag des Einstempelns in Berlin, auch nach Mitternacht. Zugeordnete Lieferungen zählen zum selben Schichttag. Laufende Schichten sind vorläufig; die Auszahlung findest du in der Monatsabrechnung.</p></details>
     </div>
   </Panel>;
 }

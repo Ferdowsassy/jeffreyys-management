@@ -18,19 +18,24 @@ export function dayStart(date) {
   }
   return instant;
 }
+export const shiftsById = shifts => new Map(shifts.filter(s=>s.id).map(s=>[s.id,s]));
+export function orderWorkDate(order, shifts) {
+  const shift=order.shiftId ? shifts.get(order.shiftId) : null;
+  return berlinDate(shift && shift.employeeId===order.employeeId ? shift.start : order.createdAt);
+}
 export function dailyEarnings(data, employeeId, date, now = Date.now()) {
-  const from=dayStart(date), to=dayStart(shiftDate(date,1));
-  const shifts=data.shifts.filter(s=>employeeId===null || s.employeeId===employeeId);
+  const shifts=data.shifts.filter(s=>(employeeId===null || s.employeeId===employeeId) && berlinDate(s.start)===date);
   let hours=0, wageCents=0;
   for(const shift of shifts) {
-    const duration=Math.max(0,Math.min(Date.parse(shift.end || new Date(now).toISOString()),to,now)-Math.max(Date.parse(shift.start),from))/3600000;
+    const duration=Math.max(0,Math.min(Date.parse(shift.end || new Date(now).toISOString()),now)-Date.parse(shift.start))/3600000;
     hours+=duration;wageCents+=Math.round(duration*Math.round((shift.hourlyRate || 0)*100));
   }
-  const paidOrders=data.orders.filter(o=>o.status==='delivered' && berlinDate(o.createdAt)===date && (employeeId===null || o.employeeId===employeeId));
+  const shiftIndex=shiftsById(data.shifts);
+  const paidOrders=data.orders.filter(o=>o.status==='delivered' && orderWorkDate(o,shiftIndex)===date && (employeeId===null || o.employeeId===employeeId));
   const deliveryCents=paidOrders.reduce((n,o)=>n+Math.round((o.deliveryFee || 0)*100),0);
   return {hours,wages:wageCents/100,fees:deliveryCents/100,gross:(wageCents+deliveryCents)/100,
     collectedCash:paidOrders.filter(o=>o.payment==='cash').reduce((n,o)=>n+Math.round((o.amount || 0)*100),0)/100,
-    provisional:shifts.some(s=>!s.end && Date.parse(s.start)<to && now>from)};
+    provisional:shifts.some(s=>!s.end && Date.parse(s.start)<=now)};
 }
 export function dailyStats(data, user, date, now = Date.now()) {
   // Scope even if this helper receives a full state rather than the API's filtered state.

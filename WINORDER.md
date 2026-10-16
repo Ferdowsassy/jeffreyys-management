@@ -71,11 +71,12 @@ A clocked-in active driver presses **Übernehmen**. The database transaction
 assigns the order to their current shift and snapshots the app's configured zone
 delivery fee. Simultaneous claims have one winner. The order moves to **Tour**,
 where the assigned driver can see customer contact, notes, articles and navigation.
-Chef, kitchen and drivers share the incoming queue and a delivery board showing
-who claimed each order, open deliveries, and today's completions. The kitchen has
-**Bestellungen** and the same board on **Tafel**; claims and completions update via
-the existing live connection. Only drivers and the chef can assign orders. The
-chef can optionally assign a delivery to a clocked-in driver.
+Chef, kitchen and drivers share the incoming queue. Only the chef can see the
+delivery board **Wer liefert welche Bestellung?**, showing who claimed each order,
+open deliveries and today's completions; its API data is empty for kitchen and
+driver accounts. Drivers see their own claimed orders under **Tour**. Claims and
+completions update via the existing live connection. Only drivers and the chef
+can assign orders. The chef can optionally assign a delivery to a clocked-in driver.
 
 Imports retain all business order fields in `winorderDetails`, including delivery
 and billing names/addresses, contact details, quantities, article numbers, sizes,
@@ -89,7 +90,9 @@ corrections; details discarded by an earlier import require such a resend.
 
 An open imported delivery can be returned to the queue before completion; doing
 so removes its shift and driver assignment. Completion and clock-out use the
-existing cash and earnings rules. Unassigned orders do not become driver earnings.
+existing cash and earnings rules. Earnings and cash deductions belong to the
+Berlin start date of the assigned shift, including deliveries after midnight.
+Unassigned orders do not become driver earnings.
 Imported article text is retained for delivery details; it is not added to article
 revenue calculations without reconciling toppings, discounts and deposits.
 
@@ -119,6 +122,6 @@ After `npm run build`, `node scripts/winorder-diagnostics-ui.mjs` checks the
 owner's diagnostics refresh, rejection messages, privacy and desktop/mobile layout
 against an isolated local app.
 `node scripts/order-payments-ui.mjs` checks shared order details, Google Maps/Waze
-address links, automatic driver availability, live kitchen assignments and the
+address links, automatic driver availability, the chef-only assignment board and the
 salary-payment dialog through isolated desktop/mobile browser sessions.
 The remaining integration check is a real send from the restaurant's WinOrder.

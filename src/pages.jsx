@@ -816,8 +816,8 @@ export function Driver({ user, data, page, act, notify }) {
               </div>
               {(user.role === "driver" || user.role === "kitchen") && (
                 <div className="shift-clock">
-                  {euro(dailyEarnings(data, user.id, today()).gross)}
-                  <span>Heute verdient · vor Bargeldabzug</span>
+                  {euro(dailyEarnings(data, user.id, active ? day(active.start) : today()).gross)}
+                  <span>{active ? 'Schichttag '+day(active.start) : 'Heute verdient'} · vor Bargeldabzug</span>
                   <small>Auszahlung gesamt: {euro(personalPay.payout)} · Bargeld bei dir: {euro(personalPay.retainedCash)}</small>
                 </div>
               )}

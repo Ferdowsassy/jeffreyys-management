@@ -37,7 +37,7 @@ export function payrollPdf(data,employees,month,now=Date.now()) {
     if(!payments.length)row(['Keine Zahlungen erfasst.','','',''],[185,100,100,130]);
     for(const p of payments)row([berlinDate(p.createdAt),p.method==='cash'?'Bar':'Überweisung',euro(p.amount),p.note || '-'],[90,100,100,225]);
     if(doc.y>700){doc.addPage();title('Fortsetzung');}
-    doc.moveDown();doc.font('Helvetica').fontSize(9).text('Auszahlung = Lohn + Liefergeld - einbehaltenes Bargeld. Bereits erfasste Gehaltszahlungen verringern den offenen Betrag. Laufende Schichten sind vorläufig.');
+    doc.moveDown();doc.font('Helvetica').fontSize(9).text('Auszahlung = Lohn + Liefergeld - einbehaltenes Bargeld. Die gesamte Schicht und zugehörige Lieferungen zählen zum Berliner Tag des Schichtbeginns, auch nach Mitternacht. Bereits erfasste Gehaltszahlungen verringern den offenen Betrag. Laufende Schichten sind vorläufig.');
   }
   const pages=doc.bufferedPageRange();
   for(let i=pages.start;i<pages.start+pages.count;i++){doc.switchToPage(i);doc.font('Helvetica').fontSize(8).fillColor('#65756c').text('JEFFREYYS / '+month+' / Seite '+(i+1)+' von '+pages.count,40,786,{lineBreak:false});}

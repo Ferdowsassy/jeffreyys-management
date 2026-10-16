@@ -16,12 +16,12 @@ test('period costs use actual dated expenses, completed delivery fees, Berlin we
  const driver=periodStats(data,{role:'driver',id:'a'},'month','2026-10');assert.equal(driver.revenue,100);assert.equal(driver.staff.length,1);
  assert.deepEqual([periodRange('week','2026-10-15').first,periodRange('week','2026-10-15').end],['2026-10-12','2026-10-19']);
 });
-test('monthly payroll splits Berlin boundaries and attributes later cash returns to original months without losing cents',()=>{
- const e={id:'d'},data={employees:[e],shifts:[{id:'s',employeeId:'d',start:'2026-09-30T21:00:00Z',end:'2026-09-30T23:00:00Z',hourlyRate:10}],orders:[['2026-08-01',1],['2026-09-01',1],['2026-10-01',1]].map(([d,amount])=>({employeeId:'d',shiftId:'s',createdAt:d+'T10:00:00Z',status:'delivered',amount,payment:'cash',deliveryFee:0})),handoffs:[{employeeId:'d',shiftId:'s',expected:3,counted:1,chefConfirmed:true,createdAt:'2026-10-02T10:00:00Z'}],salaryPayments:[]};
+test('overnight wages stay in their start month; unlinked historical cash returns preserve their original allocation',()=>{
+ const e={id:'d'},data={employees:[e],shifts:[{id:'wage-shift',employeeId:'d',start:'2026-09-30T21:00:00Z',end:'2026-09-30T23:00:00Z',hourlyRate:10}],orders:[['2026-08-01',1],['2026-09-01',1],['2026-10-01',1]].map(([d,amount])=>({employeeId:'d',shiftId:'s',createdAt:d+'T10:00:00Z',status:'delivered',amount,payment:'cash',deliveryFee:0})),handoffs:[{employeeId:'d',shiftId:'s',expected:3,counted:1,chefConfirmed:true,createdAt:'2026-10-02T10:00:00Z'}],salaryPayments:[]};
  const values=['2026-08','2026-09','2026-10'].map(m=>monthlyPayroll(e,data,m,Date.parse('2026-11-01T12:00:00Z')));
- assert.deepEqual(values.map(v=>v.wages),[0,10,10]);assert.equal(Math.round(values.reduce((n,v)=>n+v.returned,0)*100),100);
+ assert.deepEqual(values.map(v=>v.wages),[0,20,0]);assert.equal(Math.round(values.reduce((n,v)=>n+v.returned,0)*100),100);
  assert.deepEqual(values.map(v=>v.retained),[.67,.66,.67]);
- data.salaryPayments.push({employeeId:'d',month:'2026-09',amount:2});assert.equal(monthlyPayroll(e,data,'2026-09').balance,7.34);
+ data.salaryPayments.push({employeeId:'d',month:'2026-09',amount:2});assert.equal(monthlyPayroll(e,data,'2026-09').balance,17.34);
 });
 test('salary records are idempotent, reject overpayment, survive restart, and never leak other employees or invoice data',async t=>{
  const {request,login,app,dir}=await fixture(t),chef=await login('alex','1234'),driver=await login('leo','3456'),kitchen=await login('samira','2345');

@@ -37,7 +37,7 @@ export default function DailyStatistics({user,data}) {
     [business ? 'Teamverdienst vor Bargeldabzug' : 'Dein Verdienst vor Bargeldabzug',euro(stats.gross)],
     ['Ø bestätigte Lieferzeit',stats.averageMinutes===null ? '—' : Math.round(stats.averageMinutes)+' Min.']];
   if(business)metrics.push(['Umsatz erfasster Bestellungen',euro(stats.revenue)],['Barumsatz',euro(data.orders.filter(o=>berlinDate(o.createdAt)===date && o.payment==='cash').reduce((n,o)=>n+o.amount,0))]);
-  if(driver)metrics.push(['Barzahlungen zugestellter Tagesbestellungen',euro(stats.collectedCash)],
+  if(driver)metrics.push(['Barzahlungen zugestellter Schichtbestellungen',euro(stats.collectedCash)],
     ['Bargeld bei dir · alle erfassten Tage',euro(own.retainedCash)],['Deine Auszahlung · alle erfassten Tage',euro(own.payout)]);
   return <>
     <Title title="Dein Tag in Zahlen." subtitle={driver ? 'Deine Lieferungen und dein Verdienst.' : business ? 'Täglicher Überblick für deinen Betrieb.' : 'Küchenüberblick und dein persönlicher Verdienst.'} />
@@ -46,7 +46,7 @@ export default function DailyStatistics({user,data}) {
     <EarningsWeek user={user} data={data} date={date} onDateChange={setDate} />
     <div className="toolbar"><label>Statistiktag <input type="date" value={date} max={berlinDate(now)} onChange={e=>{if(e.target.value)setDate(e.target.value);}} /></label><span>Zeitzone: Berlin</span></div>
     <div className="daily-stat-grid">{metrics.map(([label,value])=><div className="daily-stat" key={label}><small>{label}</small><strong>{value}</strong></div>)}</div>
-    <details className="earnings-help"><summary>Details zu den Tageszahlen</summary><p className="muted">Arbeitsstunden werden am Tageswechsel aufgeteilt. Verdienst enthält den Lohnanteil am gewählten Tag und Liefergeld zugestellter Bestellungen nach Erfassungsdatum. Laufende Schichten sind vorläufig. Automatische Abschlüsse zählen als zugestellt, werden aus der durchschnittlichen Lieferzeit ausgenommen.</p></details>
+    <details className="earnings-help"><summary>Details zu den Tageszahlen</summary><p className="muted">Arbeitszeit, Lohn und Liefergeld zählen vollständig zum Berliner Tag des Schichtbeginns, auch nach Mitternacht. Laufende Schichten sind vorläufig. Bestell- und Zustellzahlen verwenden weiterhin den tatsächlichen Kalendertag. Automatische Abschlüsse zählen als zugestellt, werden aus der durchschnittlichen Lieferzeit ausgenommen.</p></details>
     <Bars title="Erfasste Bestellungen nach Uhrzeit" values={stats.hourly} />
     <Bars title="Erfasste Bestellungen · letzte 7 Tage bis zum gewählten Tag" values={stats.weekly} />
   </>;

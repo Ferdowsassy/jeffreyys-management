@@ -49,7 +49,7 @@ export function OrderQueue({user, data, act}) {
       </Panel>)}
     </div>
     {!orders.length && <Empty>{chef ? 'Noch keine verfügbaren WinOrder-Lieferungen.' : 'Aktuell ist keine Bestellung verfügbar. Neue Lieferungen erscheinen hier automatisch.'}</Empty>}
-    <DeliveryBoard data={data} user={user} act={act} />
+    {chef && <DeliveryBoard data={data} user={user} act={act} />}
     {chef && <Panel title="Offene Lieferungen zuordnen" subtitle="Auch manuell erfasste Bestellungen können einem anderen Fahrer im Dienst zugeteilt werden.">
       <div className="table-wrap"><table><thead><tr><th>Bestellung</th><th>Adresse</th><th>Aktueller Fahrer</th><th>Neu zuordnen</th></tr></thead><tbody>{assigned.map(o=><tr key={o.id}><td>{o.orderNumber}</td><td>{o.address}{o.source==='winorder' && <details><summary>Bestelldetails</summary><OrderDetails order={o} /><div className="row"><NavigationLinks order={o} /></div></details>}</td><td>{data.employees.find(e=>e.id===o.employeeId)?.name || '—'}</td><td><form className="order-claim" onSubmit={async e=>{e.preventDefault();setBusy(true);try{await act('assignOrder',{id:o.id,employeeId:drivers[o.id] || o.employeeId});}catch{}finally{setBusy(false);}}}><select aria-label={'Neuer Fahrer für '+o.orderNumber} value={drivers[o.id] || o.employeeId} onChange={e=>setDrivers({...drivers,[o.id]:e.target.value})}>{!onDuty.some(e=>e.id===o.employeeId) && <option value={o.employeeId}>Bitte wählen</option>}{onDuty.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select><button className="secondary" disabled={busy || !onDuty.length || !drivers[o.id] || drivers[o.id]===o.employeeId}>Zuordnen</button></form></td></tr>)}</tbody></table></div>{!assigned.length && <Empty>Keine offenen Lieferungen.</Empty>}
     </Panel>}

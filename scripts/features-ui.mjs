@@ -87,7 +87,7 @@ try {
   await login('Samira','2345');
   await expect(page.getByRole('region',{name:'Live-Fahrerkarte'})).toBeVisible();
   await expect(page.locator('.driver-marker[data-driver-id="leo"]')).toHaveAttribute('data-latitude','48.14');
-  await expect(page.getByText(/Ø .*Min. je Bestellung/)).toBeVisible();
+  await expect(page.locator('.driver-row').filter({has:page.getByText('Leo',{exact:true})}).getByText(/Ø .*Min. je Bestellung/)).toBeVisible();
   await nav('Mein Verdienst');
   await expect(page.locator('.personal-earnings')).toContainText('Samira');
   await expect(page.locator('.personal-earnings')).not.toContainText('Alex');

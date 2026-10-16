@@ -76,6 +76,8 @@ try {
 
   const kitchen=await login('Samira','2345'), driver=await login('Leo','3456',true), other=await login('Mia','4567');
   for(const session of [kitchen,driver,other])await nav(session.page,'Bestellungen');
+  await nav(chef.page,'Bestellungen');
+  for(const session of [kitchen,driver,other])await expect(session.page.locator('.delivery-board')).toHaveCount(0);
   const sample=JSON.parse(await readFile(new URL('./fixtures/winorder-detailed.json',import.meta.url),'utf8'));
   const now=new Date().toISOString();
   sample.OrderList.CreateDateTime=now;sample.OrderList.Order.ServerData.CreateDateTime=now;
@@ -100,20 +102,22 @@ try {
   await fits(driver.page);await card.screenshot({path:tmpdir()+'/jeffreyys-order-details-mobile.png'});
   await card.getByRole('button',{name:'Übernehmen',exact:true}).click();
   for(const session of [kitchen,other]) {
-    await expect(session.page.getByRole('heading',{name:'Bestellung DETAILS-100 · Leo',exact:true})).toBeVisible();
+    await expect(session.page.locator('.delivery-board')).toHaveCount(0);
     await expect(session.page.getByRole('heading',{name:'Bestellung DETAILS-100',exact:true})).toHaveCount(0);
+    expect((await (await session.context.request.get(base+'/api/state')).json()).deliveryBoard).toEqual([]);
   }
-  await kitchen.page.locator('.delivery-board').screenshot({path:tmpdir()+'/jeffreyys-kitchen-assignment.png'});
+  await expect(chef.page.getByRole('heading',{name:'Bestellung DETAILS-100 · Leo',exact:true})).toBeVisible();
+  await chef.page.locator('.delivery-board').screenshot({path:tmpdir()+'/jeffreyys-chef-assignment.png'});
   await nav(driver.page,'Tour');
   await expect(driver.page.getByText('Frau Erika Mustermann',{exact:true})).toBeVisible();
   await expect(driver.page.getByRole('link',{name:'Waze öffnen',exact:true})).toBeVisible();
   await expect(driver.page.getByText('Preis laut Kasse: 12.50',{exact:true})).toBeVisible();
   await driver.page.getByRole('button',{name:'Zugestellt',exact:true}).click();
-  await expect(kitchen.page.locator('.delivery-board-card').getByText('Zugestellt',{exact:true})).toBeVisible();
+  await expect(chef.page.locator('.delivery-board-card').getByText('Zugestellt',{exact:true})).toBeVisible();
   await nav(driver.page,'Belege');
   await driver.page.getByText('Bestelldetails',{exact:true}).click();
   await expect(driver.page.getByText('Frau Erika Mustermann',{exact:true})).toBeVisible();
-  console.log('PASS complete imported details and navigation links; immediate driver claim and kitchen live assignment/delivery updates without chef release.');
+  console.log('PASS complete imported details, navigation links, immediate driver claiming and chef-only live assignment/delivery board in UI and API.');
   if(errors.length)throw new Error(errors.join('\n'));
 } finally {
   await browser?.close();server.closeAllConnections();await new Promise(r=>server.close(r));
