@@ -27,7 +27,7 @@ async function login(name,pin,mobile=false) {
 }
 async function nav(page,name) {
   if(page.viewportSize().width<768)await page.getByRole('button',{name:'Menü',exact:true}).click();
-  await page.locator('.sidebar').getByRole('button',{name,exact:true}).click();
+  await page.locator('.sidebar').getByRole('button',{name:new RegExp('^'+name+'(?:\\s*\\d+)?$')}).click();
 }
 async function fits(page) {
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
@@ -84,40 +84,72 @@ try {
   const imported=await fetch(base+'/sendorder',{method:'POST',headers:{authorization:'Basic '+Buffer.from(credentials.username+':'+credentials.password).toString('base64')},body:Buffer.from(JSON.stringify(sample))});
   expect(imported.status).toBe(200);await imported.json();
   for(const session of [kitchen,driver,other]) {
-    await expect(session.page.getByRole('heading',{name:'Bestellung DETAILS-100',exact:true})).toBeVisible();
+    await expect(session.page.getByRole('heading',{name:'Teststraße 12',exact:true})).toBeVisible();
     await expect(session.page.getByText('Frau Erika Mustermann',{exact:true})).toBeVisible();
-    await expect(session.page.getByText('2 × Cheeseburger · Groß',{exact:true})).toBeVisible();
-    await expect(session.page.getByText('2 × Extra Käse',{exact:true})).toBeVisible();
+    await expect(session.page.getByRole('link',{name:'Anrufen: +49 89123456',exact:true})).toBeVisible();
+    if(session!==kitchen) {
+      await expect(session.page.getByText('Bestellte Artikel',{exact:true})).toHaveCount(0);
+      await expect(session.page.getByText('Alle Bestellangaben',{exact:true})).toHaveCount(0);
+      await expect(session.page.getByText('2 × Cheeseburger · Groß',{exact:true})).toHaveCount(0);
+    }
   }
   await expect(kitchen.page.getByRole('button',{name:'Übernehmen',exact:true})).toHaveCount(0);
-  const card=driver.page.locator('.order-queue-card').filter({has:driver.page.getByRole('heading',{name:'Bestellung DETAILS-100',exact:true})});
+  const card=driver.page.locator('.order-queue-card').filter({has:driver.page.getByRole('heading',{name:'Teststraße 12',exact:true})});
   for(const [label,parameter] of [['Google Maps öffnen','destination'],['Waze öffnen','q']]) {
     const href=new URL(await card.getByRole('link',{name:label,exact:true}).getAttribute('href'));
     expect(href.searchParams.get(parameter)).toBe('Teststraße 12, 80802 München');
     if(parameter==='q')expect(href.searchParams.get('navigate')).toBe('yes');
   }
-  await card.getByText('Alle Bestellangaben',{exact:true}).click();
-  for(const value of ['Testgutschein','TEST-PORTAL-100','Rechnungsstraße'])await expect(card.getByText(value,{exact:true})).toBeVisible();
-  await card.getByText('Alle Bestellangaben',{exact:true}).click();
+  await expect(kitchen.page.getByText('2 × Cheeseburger · Groß',{exact:true})).toBeVisible();
+  await expect(kitchen.page.getByText('2 × Extra Käse',{exact:true})).toBeVisible();
+  const chefCard=chef.page.locator('.order-queue-card').filter({has:chef.page.getByRole('heading',{name:'Teststraße 12',exact:true})});
+  await chefCard.getByText('Bestellte Artikel',{exact:true}).click();
+  await expect(chefCard.getByText('2 × Cheeseburger · Groß',{exact:true})).toBeVisible();
+  await chefCard.getByText('Alle Bestellangaben',{exact:true}).click();
+  for(const value of ['Testgutschein','TEST-PORTAL-100','Rechnungsstraße'])await expect(chefCard.getByText(value,{exact:true})).toBeVisible();
+  await chefCard.getByText('Alle Bestellangaben',{exact:true}).click();
+  await nav(chef.page,'Kunden');
+  const search=chef.page.getByRole('searchbox',{name:'Kunden suchen',exact:true});
+  for(const query of ['Erika','+49 89123456','erika@example.com','C00077','Teststraße']) {
+    await search.fill(query);
+    await expect(chef.page.getByText('Frau Erika Mustermann',{exact:true})).toBeVisible();
+  }
+  await expect(chef.page.getByRole('link',{name:'erika@example.com',exact:true})).toHaveAttribute('href','mailto:erika@example.com');
+  await expect(chef.page.getByText('Kd.-Nr. C00077',{exact:true})).toBeVisible();
+  await chef.page.getByText('Lieferdetails',{exact:true}).click();
+  await expect(chef.page.getByText(/2. Stock/)).toBeVisible();
+  await fits(chef.page);
+  await chef.page.locator('.customer-directory').screenshot({path:tmpdir()+'/jeffreyys-customers-mobile.png'});
+  await chef.page.setViewportSize({width:1440,height:900});await fits(chef.page);
+  await chef.page.locator('.customer-directory').screenshot({path:tmpdir()+'/jeffreyys-customers-desktop.png'});
+  await search.fill('unbekannter Kunde');await expect(chef.page.getByText('Keine passenden Kunden.',{exact:true})).toBeVisible();
+  await nav(chef.page,'Bestellungen');
+  console.log('PASS chef customer names, contact links, customer number, delivery notes, search and responsive layout.');
+  expect((await card.boundingBox()).height).toBeLessThan(800);
   await fits(driver.page);await card.screenshot({path:tmpdir()+'/jeffreyys-order-details-mobile.png'});
   await card.getByRole('button',{name:'Übernehmen',exact:true}).click();
   for(const session of [kitchen,other]) {
     await expect(session.page.locator('.delivery-board')).toHaveCount(0);
-    await expect(session.page.getByRole('heading',{name:'Bestellung DETAILS-100',exact:true})).toHaveCount(0);
+    await expect(session.page.getByRole('heading',{name:'Teststraße 12',exact:true})).toHaveCount(0);
     expect((await (await session.context.request.get(base+'/api/state')).json()).deliveryBoard).toEqual([]);
   }
-  await expect(chef.page.getByRole('heading',{name:'Bestellung DETAILS-100 · Leo',exact:true})).toBeVisible();
+  await expect(chef.page.locator('.delivery-board-card').filter({hasText:'Bestellung DETAILS-100'}).getByRole('heading',{name:'Leo',exact:true})).toBeVisible();
   await chef.page.locator('.delivery-board').screenshot({path:tmpdir()+'/jeffreyys-chef-assignment.png'});
   await nav(driver.page,'Tour');
   await expect(driver.page.getByText('Frau Erika Mustermann',{exact:true})).toBeVisible();
   await expect(driver.page.getByRole('link',{name:'Waze öffnen',exact:true})).toBeVisible();
-  await expect(driver.page.getByText('Preis laut Kasse: 12.50',{exact:true})).toBeVisible();
+  await expect(driver.page.getByText('Preis laut Kasse: 12.50',{exact:true})).toHaveCount(0);
+  await expect(driver.page.getByText('Bestellte Artikel',{exact:true})).toHaveCount(0);
+  await expect(driver.page.getByText('Alle Bestellangaben',{exact:true})).toHaveCount(0);
+  await fits(driver.page);
   await driver.page.getByRole('button',{name:'Zugestellt',exact:true}).click();
   await expect(chef.page.locator('.delivery-board-card').getByText('Zugestellt',{exact:true})).toBeVisible();
   await nav(driver.page,'Belege');
   await driver.page.getByText('Bestelldetails',{exact:true}).click();
   await expect(driver.page.getByText('Frau Erika Mustermann',{exact:true})).toBeVisible();
-  console.log('PASS complete imported details, navigation links, immediate driver claiming and chef-only live assignment/delivery board in UI and API.');
+  await expect(driver.page.getByText('Bestellte Artikel',{exact:true})).toHaveCount(0);
+  await expect(driver.page.getByText('Alle Bestellangaben',{exact:true})).toHaveCount(0);
+  console.log('PASS role-specific order details in queue, tour and receipts, navigation, immediate claiming and chef-only assignment board.');
   if(errors.length)throw new Error(errors.join('\n'));
 } finally {
   await browser?.close();server.closeAllConnections();await new Promise(r=>server.close(r));

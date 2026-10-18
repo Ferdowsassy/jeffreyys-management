@@ -22,6 +22,7 @@ import { scanReceipt } from "./receipt-ocr";
 import { summarizeItems } from "./order-items";
 import {WinOrderSettings} from './order-queue';
 import {OrderDetails, NavigationLinks} from './order-details';
+import {orderReference} from './customer-info';
 import {ScheduleEditor, ShiftTemplateEditor} from './schedule-editor';
 import {absenceNames, scheduleHours} from '../shared/schedule';
 import {MonthlyPayroll, Expenses, Customers, TimeMonthChart, RevenueTrend} from './operations';
@@ -212,8 +213,8 @@ function OrderTable({ orders, data }) {
         "Status",
       ]}
       rows={orders.map((o) => [
-        o.orderNumber || "—",
-        o.noAddress ? "Ohne Adresse · Pauschale" : <>{o.address}{o.source==='winorder' && <details><summary>Bestelldetails</summary><OrderDetails order={o} /><div className="row"><NavigationLinks order={o} /></div></details>}</>,
+        <span title={o.orderNumber}>{orderReference(o.orderNumber)}</span>,
+        o.noAddress ? "Ohne Adresse · Pauschale" : <>{o.address}{o.source==='winorder' && <details><summary>Bestelldetails</summary><OrderDetails order={o} role="driver" /><div className="row navigation-actions"><NavigationLinks order={o} /></div></details>}</>,
         person(data, o.employeeId),
         euro(o.amount),
         o.payment === "cash" ? "Bar" : "Online",
@@ -236,39 +237,9 @@ export function Management({ user, data, page, act, notify }) {
     setShow(false);
   }, [page]);
   const titles = {
-    Geld: [
-      "Fair gerechnet. Klar geregelt.",
-      "Die Monatsabrechnung für dein Team.",
-    ],
-    Team: [
-      "Die Menschen hinter den Burgern.",
-      "Rollen, Zugänge und datierte Stundenlöhne.",
-    ],
-    Gebiete: [
-      "Von hier bis zur Haustür.",
-      "Liefergebiete und Vergütung je Postleitzahl.",
-    ],
-    Kasse: [
-      "Jeder Euro nachvollziehbar.",
-      "Bargeld-Übergaben prüfen und bestätigen.",
-    ],
-    Kunden: [
-      "Aus Gästen werden Stammgäste.",
-      "Zusammengefasst nach Lieferadresse, nicht nach identifizierter Person.",
-    ],
-    Zeiten: [
-      "Zeit für Transparenz.",
-      "Erfasste Schichten prüfen und nachvollziehbar korrigieren.",
-    ],
-    Einstellungen: ["Dein Laden.", "Ladenadresse und Routen für Rückfahrten."],
-    Finanzen: [
-      "Die Zahlen hinter dem Betrieb.",
-      "Kosten als Grundlage für deine Gewinnschätzung.",
-    ],
-    Daten: [
-      "Deine Daten. Deine Kontrolle.",
-      "Sichern, Demo-Daten entfernen oder neu beginnen.",
-    ],
+    Geld: ["Monatsabrechnung"], Team: ["Team"], Gebiete: ["Liefergebiete"],
+    Kasse: ["Bargeld"], Zeiten: ["Arbeitszeiten"], Einstellungen: ["Einstellungen"],
+    Finanzen: ["Finanzen"], Daten: ["Daten"],
   };
   let body;
   const openNew = () => {
@@ -697,7 +668,7 @@ export function Management({ user, data, page, act, notify }) {
     );
   return (
     <>
-      <Title title={titles[page]?.[0] || page} subtitle={titles[page]?.[1]} />
+      {page!=="Kunden" && <Title title={titles[page]?.[0] || page} subtitle={titles[page]?.[1]} />}
       {body}
     </>
   );
@@ -711,7 +682,6 @@ function localTime(d) {
 export function Driver({ user, data, page, act, notify }) {
   const [form, setForm] = useState(false),
     [receipt, setReceipt] = useState({}),
-    [items, setItems] = useState([]),
     [scan, setScan] = useState(null),
     [scanBusy, setScanBusy] = useState(false),
     [scanStatus, setScanStatus] = useState(''),
@@ -767,7 +737,6 @@ export function Driver({ user, data, page, act, notify }) {
     try {
       const r = await scanReceipt(file, setScanStatus, {resolveMaps:async url=>(await api('receipts/maps',{url})).address});
       setReceipt(r.draft || {});
-      setItems([]);
       setScan(r);
       setScanPhoto(URL.createObjectURL(file));
       setForm(true);
@@ -782,17 +751,17 @@ export function Driver({ user, data, page, act, notify }) {
         <Title
           title={
             page === "Schicht"
-              ? "Bereit für die nächste Runde?"
+              ? "Meine Schicht"
               : page === "Tour"
-                ? "Deine nächste Haustür wartet."
+                ? "Meine Tour"
                 : page === "Belege"
-                  ? "Alles auf einem Beleg."
-                  : "Dein Einsatz zahlt sich aus."
+                  ? "Meine Belege"
+                  : "Mein Verdienst"
           }
           subtitle={
             page === "Tour"
-              ? `${open.length} offene Lieferungen · Reihenfolge nach Erfassung`
-              : "Dein persönlicher Arbeitsbereich"
+              ? `${open.length} offene Lieferungen`
+              : undefined
           }
         />
       )}{" "}
@@ -801,12 +770,12 @@ export function Driver({ user, data, page, act, notify }) {
         <>
           <Panel
             title={
-              active ? "Du bist im Dienst." : "Deine Schicht beginnt hier."
+              active ? "Im Dienst" : "Schicht starten"
             }
             subtitle={
               active
                 ? "Eingestempelt um " + time(active.start)
-                : "Ein Klick. Und los geht’s."
+                : undefined
             }
           >
             <div className="shift-overview">
@@ -857,7 +826,7 @@ export function Driver({ user, data, page, act, notify }) {
                     (o) => o.amount,
                   ),
                 )} Bar`
-              : "Navigation öffnet Google Maps. Für GPS-Updates die App geöffnet lassen."}
+              : null}
           </span>
           <div className="row">
             <label className="secondary file-button"><Camera size={17} />{scanBusy ? 'Beleg wird gelesen …' : 'Beleg fotografieren'}<input type="file" accept="image/*" capture="environment" disabled={scanBusy} onChange={e=>{photo(e.target.files[0]);e.target.value='';}} /></label>
@@ -868,7 +837,7 @@ export function Driver({ user, data, page, act, notify }) {
       {scanBusy && <div className="notice" role="status" aria-live="polite">{scanStatus} · Das Foto bleibt auf deinem Gerät.</div>}
       {form && (
         <Panel
-          action={<button className="text-button" disabled={scanBusy} onClick={() => {setForm(false);setReceipt({});setItems([]);setScan(null);setScanPhoto('');}}>Abbrechen</button>}
+          action={<button className="text-button" disabled={scanBusy} onClick={() => {setForm(false);setReceipt({});setScan(null);setScanPhoto('');}}>Abbrechen</button>}
           title="Beleg prüfen & übernehmen"
           subtitle="Keine automatische Buchung: Adresse, Betrag und Zahlungsart kontrollieren."
         >
@@ -889,15 +858,13 @@ export function Driver({ user, data, page, act, notify }) {
                 ...v,
                 amount: Number(v.amount),
                 noAddress: v.noAddress === "true",
-                items: numericItems(items),
               });
               setForm(false);
               setReceipt({});
-              setItems([]);
               setScan(null);
               setScanPhoto('');
             }}
-          ><ItemsEditor items={items} onChange={setItems} /></Form>
+          />
         </Panel>
       )}
       {page === "Belege" && (
@@ -911,6 +878,7 @@ export function Driver({ user, data, page, act, notify }) {
             {open.map((o, i) => (
               <Panel
                 key={o.id}
+                className="delivery-card"
                 title={i + 1 + ". " + (o.address || "Ohne Adresse")}
                 subtitle={o.postalCode + " " + (o.city || "")}
                 action={
@@ -922,12 +890,15 @@ export function Driver({ user, data, page, act, notify }) {
                 <div className="delivery-amount">
                   {o.amount===null ? 'Betrag fehlt' : euro(o.amount)}
                   <small>
-                    Bestellung {o.orderNumber || "—"} · Liefergeld{" "}
+                    <span title={o.orderNumber}>Bestellung {orderReference(o.orderNumber)}</span> · Liefergeld{" "}
                     {euro(o.deliveryFee)}
                   </small>
                 </div>
-                <div className="row">
+                {o.source === 'winorder' && <OrderDetails order={o} role="driver" act={act} canCorrect />}
+                <div className="row navigation-actions">
                   <NavigationLinks order={o} />
+                </div>
+                <div className="row delivery-complete">
                   <button
                     className="primary"
                     onClick={() =>
@@ -939,8 +910,7 @@ export function Driver({ user, data, page, act, notify }) {
                   </button>
                 </div>
                 {o.source === 'winorder' && <>
-                  <OrderDetails order={o} act={act} canCorrect />
-                  <button className="text-button" onClick={() => act('releaseOrder',{id:o.id}).catch(() => {})}>Zurück zu verfügbaren Bestellungen</button>
+                  <details className="delivery-options"><summary>Weitere Optionen</summary><button className="text-button" onClick={() => act('releaseOrder',{id:o.id}).catch(() => {})}>Bestellung freigeben</button></details>
                 </>}
               </Panel>
             ))}

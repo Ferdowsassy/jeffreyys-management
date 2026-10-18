@@ -1,6 +1,8 @@
 import React, {useState} from 'react';
 import {MapPin, Navigation} from 'lucide-react';
 import {Form} from './main';
+import {customerInfo,orderReference} from './customer-info';
+import {euro} from './finance';
 
 const text = value => ['string','number','boolean'].includes(typeof value) ? String(value) : '';
 const list = value => !value ? [] : Array.isArray(value) ? value : [value];
@@ -21,8 +23,8 @@ export function NavigationLinks({order}) {
   if (!order.address?.trim() || order.noAddress) return null;
   const destination=[order.address.trim(),[order.postalCode,order.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
   return <>
-    <a className="secondary" href={'https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(destination)} target="_blank" rel="noreferrer"><MapPin size={17} />Google Maps öffnen</a>
-    <a className="secondary" href={'https://waze.com/ul?q='+encodeURIComponent(destination)+'&navigate=yes&utm_source=jeffreyys-management'} target="_blank" rel="noreferrer"><Navigation size={17} />Waze öffnen</a>
+    <a className="secondary" aria-label="Google Maps öffnen" href={'https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(destination)} target="_blank" rel="noreferrer"><MapPin size={17} />Google Maps</a>
+    <a className="secondary" aria-label="Waze öffnen" href={'https://waze.com/ul?q='+encodeURIComponent(destination)+'&navigate=yes&utm_source=jeffreyys-management'} target="_blank" rel="noreferrer"><Navigation size={17} />Waze</a>
   </>;
 }
 
@@ -48,23 +50,29 @@ function Article({article,extra=false}) {
   </li>;
 }
 
-export function OrderDetails({order,act,canCorrect=false}) {
+export function CustomerContact({order,info,showNotes=true}) {
+  const {displayName,company,phone,mobile,email,notes}=info || customerInfo(order);
+  return <div className="order-customer">
+    <p><strong>{displayName || company || 'Name nicht übermittelt'}</strong></p>
+    {company && displayName && <p className="customer-company">{company}</p>}
+    {(phone || mobile || email) && <div className="order-contact-actions">
+      {phone && <a className="secondary" href={'tel:'+phone} aria-label={'Anrufen: '+phone}>{phone}</a>}
+      {mobile && <a className="secondary" href={'tel:'+mobile} aria-label={'Mobil: '+mobile}>{mobile}</a>}
+      {email && <a className="customer-email" href={'mailto:'+email}>{email}</a>}
+    </div>}
+    {showNotes && notes && <p className="order-notes delivery-notes">{notes}</p>}
+  </div>;
+}
+
+export function OrderDetails({order,act,canCorrect=false,role='chef',showPayment=true}) {
   const [showAll,setShowAll]=useState(false);
   const [error,setError]=useState('');
   if (order.source!=='winorder') return null;
-  const details=order.winorderDetails, address=details?.Customer?.DeliveryAddress || {};
+  const details=order.winorderDetails;
   const articles=list(details?.ArticleList?.Article);
-  const name=[text(address.Title),order.customerName].filter(Boolean).join(' ');
-  const phone=order.customerPhone, mobile=text(address.Mobile), email=text(address.EMail || address.Email);
   return <div className="imported-order-details">
-    {(name || text(address.Company)) && <div className="order-customer"><h3>Kunde</h3>{name && <p><strong>{name}</strong></p>}{text(address.Company) && <p>{text(address.Company)}</p>}</div>}
-    <div className="order-contact-actions">
-      {phone && <a className="secondary" href={'tel:'+phone}>Anrufen: {phone}</a>}
-      {mobile && mobile!==phone && <a className="secondary" href={'tel:'+mobile}>Mobil: {mobile}</a>}
-      {email && <p>E-Mail: {email}</p>}
-    </div>
-    <p><strong>Zahlungsart:</strong> {order.payment==='cash' ? 'Bar kassieren' : order.payment==='online' ? 'Bereits bezahlt' : 'Noch ergänzen'}{order.paymentLabel && <> · Kasse: {order.paymentLabel}</>}</p>
-    {order.deliveryNotes && <p className="order-notes">{order.deliveryNotes}</p>}
+    <CustomerContact order={order} />
+    {role==='chef' && showPayment && <p>{order.amount==null ? 'Betrag fehlt' : euro(order.amount)} · {order.payment==='cash' ? 'Bar kassieren' : order.payment==='online' ? 'Bereits bezahlt' : 'Zahlungsart fehlt'}{order.paymentLabel && <> · {order.paymentLabel}</>}</p>}
     {order.reviewIssues?.length>0 && <div className="notice">{order.reviewIssues.join(' · ')}</div>}
     {canCorrect && act && order.reviewIssues?.length>0 && <details><summary>Angaben ergänzen</summary>
       <Form initial={{...order,amount:order.amount ?? '',payment:order.payment || ''}}
@@ -74,10 +82,11 @@ export function OrderDetails({order,act,canCorrect=false}) {
         submit="Angaben speichern" onSubmit={async values=>{setError('');try{await act('reviewImportedOrder',{id:order.id,...values,amount:Number(values.amount)});}catch(e){setError(e.message);}}} />
       {error && <p role="alert">{error}</p>}
     </details>}
-    <h3>Bestellte Artikel</h3>
+    {role!=='driver' && <details className="order-articles" open={role==='kitchen' ? true : undefined}><summary>Bestellte Artikel</summary>
     {articles.length>0 ? <ul className="order-article-list">{articles.map((article,index)=><Article key={index} article={article} />)}</ul>
       : order.articleDescription ? <p className="order-notes">{order.articleDescription}</p> : <p>Keine Artikelangaben übertragen.</p>}
-    {details && <details className="order-all-details" onToggle={event=>setShowAll(event.currentTarget.open)}><summary>Alle Bestellangaben</summary>{showAll && <SourceFields value={details} />}</details>}
+    </details>}
+    {role==='chef' && details && <details className="order-all-details" onToggle={event=>setShowAll(event.currentTarget.open)}><summary>Alle Bestellangaben</summary>{showAll && <SourceFields value={details} />}</details>}
   </div>;
 }
 
@@ -86,9 +95,10 @@ export function DeliveryBoard({data,user,act}) {
   const orders=(data.deliveryBoard || []).slice().sort((a,b)=>(b.claimedAt || b.createdAt).localeCompare(a.claimedAt || a.createdAt));
   return <section className="delivery-board" aria-label="Lieferübersicht"><h2>Wer liefert welche Bestellung?</h2>
     {!orders.length ? <p>Noch keine Lieferungen übernommen.</p> : <div className="delivery-grid">{orders.map(order=><article className="delivery-board-card" key={order.id}>
-      <h3>Bestellung {order.orderNumber} · {order.driverName}</h3>
+      <h3>{order.driverName}</h3>
       <p><strong>{order.status==='delivered' ? 'Zugestellt' : 'Unterwegs / übernommen'}</strong>{order.claimedAt ? ' · '+new Date(order.claimedAt).toLocaleTimeString('de-DE',{timeZone:'Europe/Berlin',hour:'2-digit',minute:'2-digit'}) : ''}</p>
       <p>{order.address} · {order.postalCode} {order.city}</p>
+      <p className="order-reference" title={order.orderNumber}>Bestellung {orderReference(order.orderNumber)}</p>
       <details><summary>Bestelldetails</summary><OrderDetails order={order} act={act} canCorrect={order.status==='open' && (user.role==='chef' || user.id===order.employeeId)} /><div className="order-contact-actions"><NavigationLinks order={order} /></div></details>
     </article>)}</div>}
   </section>;

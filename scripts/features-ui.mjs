@@ -114,14 +114,11 @@ try {
   await page.getByLabel('Betrag (€)',{exact:true}).fill('10');
   await page.getByLabel('Zahlungsart',{exact:true}).selectOption('online');
   await page.getByLabel('Adressart',{exact:true}).selectOption('true');
-  await page.getByRole('button',{name:'+ Artikel',exact:true}).click();
-  await page.getByLabel('Artikel 1',{exact:true}).fill('Fries');
-  await page.getByLabel('Menge 1',{exact:true}).fill('2');
-  await page.getByLabel('Stückpreis 1',{exact:true}).fill('5');
+  await expect(page.getByRole('button',{name:'+ Artikel',exact:true})).toHaveCount(0);
   await page.getByRole('button',{name:'Beleg übernehmen'}).click();
   await expect(page.locator('tbody')).toContainText('ITEM-UI');
   const saved = await (await context.request.get(base + '/api/state')).json();
-  expect(saved.orders.find(o => o.orderNumber === 'ITEM-UI').items).toEqual([{name:'Fries',quantity:2,unitPrice:5}]);
+  expect(saved.orders.find(o => o.orderNumber === 'ITEM-UI').items || []).toEqual([]);
   if (errors.length) throw Error(errors.join('\n'));
   console.log('PASS team contact, monthly wages, 90/365-day analysis, articles, schedule edits and kitchen map/own wages; desktop and mobile');
 } catch (error) {

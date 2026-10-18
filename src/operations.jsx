@@ -4,6 +4,8 @@ import {euro,day,hours,formatHours,sum,payroll} from './finance';
 import {berlinDate,shiftDate,dailyEarnings,shiftsById,orderWorkDate} from '../shared/daily-stats';
 import {periodRange,periodStats} from '../shared/accounting';
 import EarningsWeek from './earnings-week';
+import {customerRows,orderReference} from './customer-info';
+import {CustomerContact,NavigationLinks,OrderDetails} from './order-details';
 
 const monthNow=()=>day(Date.now()).slice(0,7);
 const expenseNames={food:'Einkauf / Waren',fuel:'Benzin',commission:'Provisionen',fixed:'Fixkosten',other:'Sonstiges'};
@@ -80,14 +82,25 @@ export function Expenses({data,act}) {
       </Form>{error && <p role="alert">{error}</p>}
     </Panel>}</>;
 }
+function CustomerHistory({orders}) {
+  const [open,setOpen]=useState(false);
+  return <details onToggle={event=>setOpen(event.currentTarget.open)}><summary>Bestellverlauf</summary>{open && orders.map(o=><details key={o.id}><summary title={o.orderNumber}>{orderReference(o.orderNumber)} · {euro(o.amount)}</summary><OrderDetails order={o} /></details>)}</details>;
+}
 export function Customers({data,act}) {
   const [sort,setSort]=useState('revenue'),[query,setQuery]=useState(''),[statusFilter,setStatusFilter]=useState('all');
-  const grouped=new Map();
-  for(const order of data.orders.filter(o=>!o.noAddress && o.address && ['open','delivered'].includes(o.status))){const key=(order.address+' '+order.postalCode+' '+order.city).trim().toLocaleLowerCase('de-DE');if(!grouped.has(key))grouped.set(key,[]);grouped.get(key).push(order);}
-  const rows=[...grouped.values()].map(os=>{const sorted=[...os].sort((a,b)=>a.createdAt.localeCompare(b.createdAt)),last=sorted.at(-1),days=Math.floor((Date.now()-Date.parse(last.createdAt))/86400000),interval=os.length>1?(Date.parse(last.createdAt)-Date.parse(sorted[0].createdAt))/86400000/(os.length-1):null,status=interval!==null && days>Math.max(7,interval*1.5)?'Gefährdet':os.length===1?'Neu':os.length>=5?'Stammkunde':'Aktiv';return {address:last.address+', '+last.postalCode+' '+(last.city || ''),count:os.length,revenue:sum(os,o=>o.amount),days,status};}).filter(r=>r.address.toLocaleLowerCase('de-DE').includes(query.toLocaleLowerCase('de-DE')) && (statusFilter==='all'||r.status===statusFilter)).sort((a,b)=>sort==='address'?a.address.localeCompare(b.address,'de'):sort==='recent'?a.days-b.days:sort==='inactive'?b.days-a.days:sort==='count'?b.count-a.count:b.revenue-a.revenue);
-  return <Panel title="Deine Lieferadressen" subtitle="Gruppiert nach Adresse; mehrere Haushalte können dieselbe Adresse nutzen."><div className="toolbar"><label>Adresse suchen<input type="search" value={query} onChange={e=>setQuery(e.target.value)} /></label><label>Sortieren<select value={sort} onChange={e=>setSort(e.target.value)}>{[['revenue','Höchster Umsatz'],['count','Meiste Bestellungen'],['recent','Zuletzt bestellt'],['inactive','Längste Bestellpause'],['address','Adresse A–Z']].map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label><label>Status<select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option value="all">Alle</option>{['Neu','Aktiv','Stammkunde','Gefährdet'].map(s=><option key={s}>{s}</option>)}</select></label></div>
-    <div className="daily-stat-grid"><div className="daily-stat"><small>Adressen im Filter</small><strong>{rows.length}</strong></div><div className="daily-stat"><small>Umsatz</small><strong>{euro(sum(rows,r=>r.revenue))}</strong></div><div className="daily-stat"><small>Bestellungen</small><strong>{sum(rows,r=>r.count)}</strong></div></div>
-    <DataTable headers={['Adresse','Bestellungen','Umsatz','Ø Bestellwert','Zuletzt','Status','Aktion']}>{rows.map(r=><tr key={r.address}><td>{r.address}</td><td>{r.count}</td><td>{euro(r.revenue)}</td><td>{euro(r.revenue/r.count)}</td><td>{r.days} Tage</td><td>{r.status}</td><td>{r.status==='Gefährdet' && <button className="text-button" onClick={()=>act('addTask',{text:'Kundenreaktivierung prüfen: '+r.address,visibility:'chef'}).catch(()=>{})}>Aufgabe anlegen</button>}</td></tr>)}</DataTable>
+  const search=query.trim().toLocaleLowerCase('de-DE');
+  const rows=customerRows(data.orders).filter(r=>[r.address,...Object.values(r.info)].join(' ').toLocaleLowerCase('de-DE').includes(search) && (statusFilter==='all'||r.status===statusFilter))
+    .sort((a,b)=>sort==='address'?a.address.localeCompare(b.address,'de'):sort==='recent'?a.days-b.days:sort==='inactive'?b.days-a.days:sort==='count'?b.count-a.count:b.revenue-a.revenue);
+  return <Panel title="Kunden" className="customer-directory"><div className="toolbar"><label>Kunden suchen<input type="search" placeholder="Name, Telefon oder Adresse" value={query} onChange={e=>setQuery(e.target.value)} /></label><label>Sortieren<select value={sort} onChange={e=>setSort(e.target.value)}>{[['revenue','Höchster Umsatz'],['count','Meiste Bestellungen'],['recent','Zuletzt bestellt'],['inactive','Längste Bestellpause'],['address','Adresse A–Z']].map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label><label>Status<select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option value="all">Alle</option>{['Neu','Aktiv','Stammkunde','Gefährdet'].map(s=><option key={s}>{s}</option>)}</select></label></div>
+    <DataTable headers={['Kunde','Lieferadresse','Bestellungen','Umsatz','Zuletzt','Status']}>{rows.map(r=><tr key={r.key}>
+      <td data-label="Kunde"><CustomerContact info={r.info} showNotes={false} />{r.info.number && <small>Kd.-Nr. {r.info.number}</small>}</td>
+      <td data-label="Lieferadresse">{r.address}<details><summary>Lieferdetails</summary>{r.info.notes && <p className="order-notes">{r.info.notes}</p>}<div className="order-contact-actions"><NavigationLinks order={r.last} /></div></details></td>
+      <td data-label="Bestellungen">{r.count}<CustomerHistory orders={r.orders} /></td>
+      <td data-label="Umsatz">{euro(r.revenue)}<small>Ø {euro(r.revenue/r.count)}</small></td>
+      <td data-label="Zuletzt">{r.days===0 ? 'Heute' : r.days===1 ? 'Gestern' : 'Vor '+r.days+' Tagen'}</td>
+      <td data-label="Status">{r.status}{r.status==='Gefährdet' && <button className="text-button" onClick={()=>act('addTask',{text:'Kundenreaktivierung prüfen: '+(r.info.name || r.info.company || '')+' · '+r.address,visibility:'chef'}).catch(()=>{})}>Aufgabe anlegen</button>}</td>
+    </tr>)}</DataTable>
+    {!rows.length && <Empty>{query || statusFilter!=='all' ? 'Keine passenden Kunden.' : 'Noch keine Kunden vorhanden.'}</Empty>}
   </Panel>;
 }
 export function PeriodPicker({mode,setMode,value,setValue}) {return <div className="toolbar"><div className="segmented">{[['day','Tag'],['week','Woche'],['month','Monat'],['year','Jahr']].map(([v,l])=><button key={v} className={mode===v?'selected':''} onClick={()=>{setMode(v);setValue(day(Date.now()).slice(0,v==='year'?4:v==='month'?7:10));}}>{l}</button>)}</div><label>Zeitraum<input aria-label="Zeitraum" type={['day','week'].includes(mode)?'date':mode==='month'?'month':'number'} min={mode==='year'?2000:undefined} max={mode==='year'?2100:undefined} value={value} onChange={e=>{if(e.target.value && (mode!=='year'||/^\d{4}$/.test(e.target.value)))setValue(e.target.value);}} /></label></div>;}

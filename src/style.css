@@ -1711,3 +1711,55 @@ button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visibl
   .role-driver .quick-actions > *, .role-driver .delivery-grid .row > * { width: 100%; justify-content: center; }
 }
 .schedule-shift small { display: block; margin-top: 5px; font-size: 11px; }
+
+/* Delivery cards put the destination and next action first. */
+.delivery-card { min-width: 0; align-self: start; }
+.delivery-card .panel-header { align-items: flex-start; gap: 12px; padding-bottom: 12px; }
+.delivery-card .panel-header h2 { font-size: 20px; line-height: 1.35; overflow-wrap: anywhere; }
+.delivery-card .panel-header .badge { flex-shrink: 0; white-space: nowrap; }
+.delivery-card .delivery-amount { padding-bottom: 14px; }
+.delivery-card .imported-order-details { padding-bottom: 12px; }
+.delivery-card > .order-reference { margin-top: 0; margin-bottom: 12px; }
+.order-reference { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.customer-company { color: var(--muted); }
+.customer-email { flex-basis: 100%; font-size: 13px; overflow-wrap: anywhere; }
+.delivery-notes { background: #f5f5ee; border-left: 3px solid var(--orange); padding: 10px 12px; border-radius: 0 6px 6px 0; }
+.order-articles { margin-top: 14px; }
+.order-articles summary, .order-all-details summary, .delivery-options summary, .customer-directory summary { cursor: pointer; padding-block: 10px; }
+.navigation-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.navigation-actions > a { flex: 1; justify-content: center; white-space: nowrap; }
+.role-driver .delivery-grid .navigation-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+.role-driver .delivery-grid .navigation-actions > a { width: auto; padding-inline: 8px; }
+.delivery-options { color: var(--muted); font-size: 13px; }
+.delivery-options .text-button { margin-top: 4px; }
+.order-reassignment { margin-block: 24px; }
+.order-reassignment > summary { cursor: pointer; padding-block: 14px; font-weight: 600; }
+.customer-directory .toolbar > label:first-child { flex: 1; min-width: 200px; }
+.customer-directory .toolbar > label { display: grid; gap: 7px; }
+.customer-directory td { vertical-align: top; overflow-wrap: anywhere; }
+.customer-directory td:first-child { min-width: 190px; }
+.customer-directory td small { display: block; color: var(--muted); margin-top: 6px; }
+.customer-directory .order-customer > p:first-child { margin-top: 0; }
+.customer-directory .order-contact-actions { gap: 6px; }
+.customer-directory .order-contact-actions .secondary { padding: 8px 10px; font-size: 12px; }
+.customer-directory .imported-order-details { padding: 0; }
+.customer-directory td details details { border-top: 1px solid var(--line); }
+@media (max-width: 700px) {
+  .customer-directory .toolbar { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin-inline: 16px; }
+  .customer-directory .toolbar > label:first-child { grid-column: 1 / -1; min-width: 0; }
+  .customer-directory .toolbar input, .customer-directory .toolbar select { width: 100%; min-width: 0; }
+  .customer-directory .table-wrap { overflow: visible; }
+  .customer-directory table, .customer-directory tbody { display: block; min-width: 0; }
+  .customer-directory thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .customer-directory tr { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); border-top: 1px solid var(--line); padding: 16px; gap: 16px; }
+  .customer-directory td { display: block; padding: 0; border: 0; min-width: 0; }
+  .customer-directory td:first-child, .customer-directory td:nth-child(2) { grid-column: 1 / -1; min-width: 0; }
+  .customer-directory td:nth-child(n+3)::before { content: attr(data-label); display: block; font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+  .delivery-card .panel-header { padding-bottom: 10px; }
+  .delivery-card .delivery-amount, .delivery-card .imported-order-details { padding-inline: 16px; }
+  .delivery-grid .delivery-card > .row { padding: 0 16px 16px; }
+  .delivery-card > .order-claim { margin: 4px 16px 16px; }
+  .delivery-card > .order-claim > .primary { width: 100%; }
+  .delivery-card > .order-reference { margin-inline: 16px; }
+  .delivery-card > .delivery-options { margin: 0 16px 16px; }
+}

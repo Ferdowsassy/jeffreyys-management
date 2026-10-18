@@ -518,8 +518,7 @@ function App() {
           ) : current === "Tafel" ? (
             <>
               <Title
-                title="Alles im Blick."
-                subtitle="Küche & Fahrer · Dein Live-Überblick"
+                title="Küchenübersicht"
               />
               <Driver
                 user={user}
@@ -538,8 +537,7 @@ function App() {
           ) : current === "Aufgaben" ? (
             <>
               <Title
-                title="Was noch ansteht."
-                subtitle="Gemeinsamer Merkzettel für Chef & Küche"
+                title="Aufgaben"
               />
               <Tasks data={data} act={act} />
             </>

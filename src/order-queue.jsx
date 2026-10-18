@@ -2,6 +2,7 @@ import React, {useEffect, useState} from 'react';
 import {api, Badge, Empty, Form, Panel, Title} from './main';
 import {euro} from './finance';
 import {OrderDetails,NavigationLinks,DeliveryBoard} from './order-details';
+import {orderReference} from './customer-info';
 
 export function OrderQueue({user, data, act}) {
   const [busy, setBusy] = useState(false), [editing, setEditing] = useState(null), [drivers, setDrivers] = useState({});
@@ -17,18 +18,18 @@ export function OrderQueue({user, data, act}) {
     catch {} finally {setBusy(false);}
   }
   return <>
-    <Title title="Verfügbare Bestellungen" subtitle={chef ? 'Neue Lieferungen sind sofort für alle Fahrer verfügbar.' : user.role==='kitchen' ? 'Neue Bestellungen und die aktuelle Fahrerzuordnung live sehen.' : 'Wähle deine Lieferungen. Übernommene Bestellungen findest du unter Tour.'} />
+    <Title title="Verfügbare Bestellungen" />
     {user.role==='driver' && !active && <div className="notice">Bitte zuerst unter Schicht einstempeln, um Bestellungen zu übernehmen.</div>}
     <div className="delivery-grid">
-      {orders.map(order => <Panel key={order.id} className="order-queue-card" title={'Bestellung '+order.orderNumber}
-        subtitle={new Date(order.createdAt).toLocaleTimeString('de-DE',{timeZone:'Europe/Berlin',hour:'2-digit',minute:'2-digit'})+' · WinOrder'}
-        action={<Badge tone={order.reviewIssues?.length ? 'orange' : 'green'}>{order.reviewIssues?.length ? 'Verfügbar · Angaben fehlen' : 'Verfügbar'}</Badge>}>
-        <p><strong>{order.address || 'Adresse fehlt'}</strong><br />{order.postalCode} {order.city}</p>
+      {orders.map(order => <Panel key={order.id} className="order-queue-card delivery-card" title={order.address || 'Adresse fehlt'}
+        subtitle={[order.postalCode,order.city].filter(Boolean).join(' ')}
+        action={<Badge tone={order.reviewIssues?.length ? 'orange' : 'green'}>{order.reviewIssues?.length ? 'Angaben fehlen' : new Date(order.createdAt).toLocaleTimeString('de-DE',{timeZone:'Europe/Berlin',hour:'2-digit',minute:'2-digit'})}</Badge>}>
+        <p className="order-reference" title={order.orderNumber}>Bestellung {orderReference(order.orderNumber)}</p>
         <div className="delivery-amount">{order.amount === null ? 'Betrag prüfen' : euro(order.amount)}
           <small>{order.payment === 'cash' ? 'Bar kassieren' : order.payment === 'online' ? 'Bereits bezahlt' : 'Zahlungsart prüfen: '+(order.paymentLabel || 'fehlt')}</small>
         </div>
-        <OrderDetails order={order} />
-        <div className="row"><NavigationLinks order={order} /></div>
+        <OrderDetails order={order} role={user.role} showPayment={false} />
+        {canClaim && <div className="row navigation-actions"><NavigationLinks order={order} /></div>}
         {editing === order.id && chef ? <Form initial={{...order,amount:order.amount ?? '',payment:order.payment || ''}}
           fields={[{name:'address',label:'Straße & Hausnummer'}, {name:'postalCode',label:'PLZ',pattern:'[0-9]{5}'}, {name:'city',label:'Ort'},
             {name:'amount',label:'Gesamtbetrag (€)',type:'number',min:0,step:'0.01'},
@@ -48,11 +49,11 @@ export function OrderQueue({user, data, act}) {
         </>}
       </Panel>)}
     </div>
-    {!orders.length && <Empty>{chef ? 'Noch keine verfügbaren WinOrder-Lieferungen.' : 'Aktuell ist keine Bestellung verfügbar. Neue Lieferungen erscheinen hier automatisch.'}</Empty>}
+    {!orders.length && <Empty>Keine verfügbaren Bestellungen.</Empty>}
     {chef && <DeliveryBoard data={data} user={user} act={act} />}
-    {chef && <Panel title="Offene Lieferungen zuordnen" subtitle="Auch manuell erfasste Bestellungen können einem anderen Fahrer im Dienst zugeteilt werden.">
+    {chef && assigned.length>0 && <details className="order-reassignment"><summary>Fahrer ändern · {assigned.length} offene Lieferungen</summary><Panel title="Offene Lieferungen zuordnen">
       <div className="table-wrap"><table><thead><tr><th>Bestellung</th><th>Adresse</th><th>Aktueller Fahrer</th><th>Neu zuordnen</th></tr></thead><tbody>{assigned.map(o=><tr key={o.id}><td>{o.orderNumber}</td><td>{o.address}{o.source==='winorder' && <details><summary>Bestelldetails</summary><OrderDetails order={o} /><div className="row"><NavigationLinks order={o} /></div></details>}</td><td>{data.employees.find(e=>e.id===o.employeeId)?.name || '—'}</td><td><form className="order-claim" onSubmit={async e=>{e.preventDefault();setBusy(true);try{await act('assignOrder',{id:o.id,employeeId:drivers[o.id] || o.employeeId});}catch{}finally{setBusy(false);}}}><select aria-label={'Neuer Fahrer für '+o.orderNumber} value={drivers[o.id] || o.employeeId} onChange={e=>setDrivers({...drivers,[o.id]:e.target.value})}>{!onDuty.some(e=>e.id===o.employeeId) && <option value={o.employeeId}>Bitte wählen</option>}{onDuty.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select><button className="secondary" disabled={busy || !onDuty.length || !drivers[o.id] || drivers[o.id]===o.employeeId}>Zuordnen</button></form></td></tr>)}</tbody></table></div>{!assigned.length && <Empty>Keine offenen Lieferungen.</Empty>}
-    </Panel>}
+    </Panel></details>}
   </>;
 }
 

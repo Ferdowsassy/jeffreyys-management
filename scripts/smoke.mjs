@@ -19,6 +19,6 @@ await page.setViewportSize({width:1440,height:1000});
 for(const label of ['Schicht','Tour','Belege','Plan','Verdienst']){await page.locator('nav button').filter({hasText:new RegExp('^'+label+'$')}).click();await page.locator('h1').waitFor();console.log('Driver page OK:',label)}
 assert.equal(await page.locator('nav button').filter({hasText:'Finanzen'}).count(),0);
 await context.request.post('http://127.0.0.1:5173/api/logout',{data:{}});await login('Samira','2345');
-await page.getByRole('heading',{name:'Alles im Blick.'}).waitFor();console.log('Kitchen dashboard OK');
+await page.getByRole('heading',{name:'Küchenübersicht'}).waitFor();console.log('Kitchen dashboard OK');
 assert.deepEqual(errors,[]);console.log('No browser runtime errors');
 }finally{await browser.close()}
