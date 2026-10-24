@@ -27,6 +27,7 @@ import {
 import { euro, day, sum, hours } from "./finance";
 import { Management, Driver, Schedule, Analytics } from "./pages";
 import "./style.css";
+import "./premium.css";
 import {ShiftCorrections} from "./shift-corrections";
 import { InstallApp } from "./install-app";
 import { useDriverLocation } from "./location-sharing";
@@ -405,7 +406,8 @@ function App() {
     data.orders.some((o) => o.demo) || data.employees.some((e) => e.demo);
   return (
     <div className={'app role-'+user.role}>
-      <aside className={mobile ? "sidebar open" : "sidebar"}>
+      {mobile && <button className="sidebar-scrim" aria-label="Menü schließen" onClick={() => setMobile(false)} />}
+      <aside id="workspace-navigation" className={mobile ? "sidebar open" : "sidebar"}>
         <a
           className="brand"
           href="#"
@@ -473,6 +475,8 @@ function App() {
             <button
               className="icon-button mobile-menu"
               aria-label="Menü"
+              aria-expanded={mobile}
+              aria-controls="workspace-navigation"
               onClick={() => setMobile(!mobile)}
             >
               <Menu size={22} />
