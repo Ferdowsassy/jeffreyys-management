@@ -156,7 +156,7 @@ export function Schedule({ user, data, act }) {
       </div>
       {user.role==='chef' && <div className="toolbar"><button className="secondary" onClick={()=>setTemplatesOpen(!templatesOpen)}>Schichtvorlagen bearbeiten</button></div>}
       {templatesOpen && <ShiftTemplateEditor data={data} act={act} onClose={()=>setTemplatesOpen(false)} />}
-      {show && <ScheduleEditor key={editing?.id || editing?.date || 'new'} data={data} act={act} editing={editing || {date:days[0]}} onClose={()=>{setShow(false);setEditing(null);}} />}
+      {show && <ScheduleEditor key={editing?.id || `${editing?.date || days[0]}:${editing?.employeeId || 'new'}`} data={data} act={act} editing={editing || {date:days[0]}} onClose={()=>{setShow(false);setEditing(null);}} />}
       <p className="schedule-summary">{scheduled.length} Einträge · {formatHours(sum(scheduled,scheduleHours))} geplant{user.role==='chef' && ` · ${euro(cost)} geschätzte Lohnkosten`}</p>
       {(role==='all' ? (user.role==='driver'?['driver']:['kitchen','driver',...(scheduled.some(s=>data.employees.find(e=>e.id===s.employeeId)?.role==='chef')?['chef']:[])]) : [role]).map(group=>{
         const entries=scheduled.filter(s=>data.employees.find(e=>e.id===s.employeeId)?.role===group);

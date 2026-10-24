@@ -63,6 +63,11 @@ try {
   await page.screenshot({path:evidence + '/features-analytics.png',fullPage:true});
   await nav('Plan');
   await page.locator('.week-day').first().getByRole('button',{name:/Schicht am .* hinzufügen/}).click();
+  await expect(page.getByLabel('Mitarbeiter',{exact:true})).toHaveValue('samira');
+  await page.locator('.department-driver .week-day').first().getByRole('button',{name:/Schicht am .* hinzufügen/}).click();
+  await expect(page.getByLabel('Mitarbeiter',{exact:true})).toHaveValue('leo');
+  await page.locator('.department-kitchen .week-day').first().getByRole('button',{name:/Schicht am .* hinzufügen/}).click();
+  await expect(page.getByLabel('Mitarbeiter',{exact:true})).toHaveValue('samira');
   await page.getByLabel('Mitarbeiter',{exact:true}).selectOption('samira');
   await page.getByLabel('Beginn',{exact:true}).fill('22:00');
   await page.getByLabel('Ende',{exact:true}).fill('02:00');
@@ -98,7 +103,7 @@ try {
   await page.waitForFunction(() => document.querySelector('.sidebar').getBoundingClientRect().right <= 1);
   await page.getByRole('button',{name:'Menü',exact:true}).click();
   await nav('Plan');
-  await expect(page.getByRole('heading',{name:'Wochenübersicht'})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Stundenplan',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Menü',exact:true}).click();
   await nav('Mein Verdienst');
   await page.waitForFunction(() => document.querySelector('.sidebar').getBoundingClientRect().right <= 1);
