@@ -116,7 +116,7 @@ try {
   await nav('Belege');
   await page.getByRole('button',{name:'Beleg erfassen',exact:true}).click();
   await page.getByLabel('Bestellnummer',{exact:true}).fill('ITEM-UI');
-  await page.getByLabel('Betrag (€)',{exact:true}).fill('10');
+  await page.getByLabel('Bestellbetrag ohne Trinkgeld (€)',{exact:true}).fill('10');
   await page.getByLabel('Zahlungsart',{exact:true}).selectOption('online');
   await page.getByLabel('Adressart',{exact:true}).selectOption('true');
   await expect(page.getByRole('button',{name:'+ Artikel',exact:true})).toHaveCount(0);

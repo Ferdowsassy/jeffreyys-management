@@ -34,7 +34,7 @@ export default function DailyStatistics({user,data}) {
   const metrics=[['Erfasste Bestellungen',stats.orders],['Am gewählten Tag zugestellt',stats.completed],
     ['Automatisch beim Ausstempeln geschlossen',stats.automatic],['Jetzt offene Lieferungen',stats.open],
     [business ? 'Arbeitsstunden · Team' : 'Deine Arbeitsstunden',formatHours(stats.hours)],
-    [business ? 'Teamverdienst vor Bargeldabzug' : 'Dein Verdienst vor Bargeldabzug',euro(stats.gross)],
+    [business ? 'Teamverdienst vor Bargeldabzug' : 'Dein Verdienst vor Bargeldabzug',euro(stats.totalEarnings)],
     ['Ø bestätigte Lieferzeit',stats.averageMinutes===null ? '—' : Math.round(stats.averageMinutes)+' Min.']];
   if(business)metrics.push(['Umsatz erfasster Bestellungen',euro(stats.revenue)],['Barumsatz',euro(data.orders.filter(o=>berlinDate(o.createdAt)===date && o.payment==='cash').reduce((n,o)=>n+o.amount,0))]);
   if(driver)metrics.push(['Barzahlungen zugestellter Schichtbestellungen',euro(stats.collectedCash)],
@@ -53,5 +53,5 @@ export default function DailyStatistics({user,data}) {
 }
 function PeriodSummary({data,user,mode,value}) {
   const stats=periodStats(data,user,mode,value);
-  return <Panel title={mode==='year'?'Jahresübersicht':mode==='week'?'Wochenübersicht':'Monatsübersicht'} subtitle={value}><div className="daily-stat-grid">{[['Bestellungen',stats.orders.length],['Arbeitszeit',formatHours(stats.staff[0]?.hours || 0)],['Verdienst vor Bargeldabzug',euro(stats.staff[0]?.gross || 0)],...(user.role==='driver'?[['Barzahlungen',euro(stats.cash)]]:[])].map(([label,v])=><div className="daily-stat" key={label}><small>{label}</small><strong>{v}</strong></div>)}</div></Panel>;
+  return <Panel title={mode==='year'?'Jahresübersicht':mode==='week'?'Wochenübersicht':'Monatsübersicht'} subtitle={value}><div className="daily-stat-grid">{[['Bestellungen',stats.orders.length],['Arbeitszeit',formatHours(stats.staff[0]?.hours || 0)],['Verdienst vor Bargeldabzug',euro(stats.staff[0]?.totalEarnings || 0)],...(user.role==='driver'?[['Barzahlungen',euro(stats.cash)]]:[])].map(([label,v])=><div className="daily-stat" key={label}><small>{label}</small><strong>{v}</strong></div>)}</div></Panel>;
 }

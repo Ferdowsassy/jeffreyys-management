@@ -32,7 +32,7 @@ export function monthlyPayroll(employee, data, month, now=Date.now()) {
   });
   const p=payroll({employees:[employee],shifts,orders,handoffs},now)[0];
   const paidCents=(data.salaryPayments || []).filter(p=>p.employeeId===employee.id && p.month===month).reduce((n,p)=>n+Math.round(p.amount*100),0);
-  return {hours:p.hours,wages:p.hourlyPay,fees:p.deliveryPay,gross:p.gross,cash:p.collectedCash,returned:p.returnedCash,retained:p.retainedCash,payout:p.payout,paid:paidCents/100,balance:Math.round(p.payout*100-paidCents)/100};
+  return {hours:p.hours,wages:p.hourlyPay,fees:p.deliveryPay,gross:p.gross,onlineTips:p.onlineTips,cashTips:p.cashTips,tips:p.tips,totalEarnings:p.totalEarnings,cash:p.collectedCash,returned:p.returnedCash,retained:p.retainedCash,payout:p.payout,paid:paidCents/100,balance:Math.round(p.payout*100-paidCents)/100};
 }
 
 export function periodStats(data,user,mode,value,now=Date.now()) {

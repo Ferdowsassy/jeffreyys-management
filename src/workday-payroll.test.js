@@ -18,8 +18,8 @@ test('month-end wages, deliveries and cash settlement all remain in the start mo
   const {employee,data,now}=night('2026-09-30T22:00:00+02:00','2026-10-01T02:00:00+02:00');
   data.salaryPayments.push({employeeId:'a',month:'2026-09',amount:7});
   const september=monthlyPayroll(employee,data,'2026-09',now), october=monthlyPayroll(employee,data,'2026-10',now);
-  assert.deepEqual(september,{hours:4,wages:40,fees:5,gross:45,cash:20,returned:5,retained:15,payout:30,paid:7,balance:23});
-  assert.deepEqual(october,{hours:0,wages:0,fees:0,gross:0,cash:0,returned:0,retained:0,payout:0,paid:0,balance:0});
+  assert.deepEqual(september,{hours:4,wages:40,fees:5,gross:45,onlineTips:0,cashTips:0,tips:0,totalEarnings:45,cash:20,returned:5,retained:15,payout:30,paid:7,balance:23});
+  assert.deepEqual(october,{hours:0,wages:0,fees:0,gross:0,onlineTips:0,cashTips:0,tips:0,totalEarnings:0,cash:0,returned:0,retained:0,payout:0,paid:0,balance:0});
   const first=dailyEarnings(data,'a','2026-09-30',now), second=dailyEarnings(data,'a','2026-10-01',now);
   assert.deepEqual([first.hours,first.wages,first.fees,first.collectedCash],[4,40,5,20]);
   assert.equal(second.gross,0);

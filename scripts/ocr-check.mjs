@@ -31,7 +31,7 @@ try{
   const expected=process.env.OCR_EXPECTED_JSON_FILE?JSON.parse(await readFile(process.env.OCR_EXPECTED_JSON_FILE,'utf8')):{amount:'27.5',orderNumber:'SCAN-123',address:'Teststraße 12',postalCode:'80802',city:'München',payment:'online'};
   await expect(page.getByText('Beleg prüfen & übernehmen',{exact:true})).toBeVisible({timeout:90000});
   if(process.env.OCR_TEXT_FILE)await writeFile(process.env.OCR_TEXT_FILE,await page.locator('.receipt-review pre').textContent());
-  for(const [field,label] of Object.entries({amount:'Betrag (€)',orderNumber:'Bestellnummer',address:'Straße & Hausnummer',postalCode:'PLZ (5 Ziffern)',city:'Ort',payment:'Zahlungsart'}))
+  for(const [field,label] of Object.entries({amount:'Bestellbetrag ohne Trinkgeld (€)',orderNumber:'Bestellnummer',address:'Straße & Hausnummer',postalCode:'PLZ (5 Ziffern)',city:'Ort',payment:'Zahlungsart'}))
     if(expected[field]!==null)await expect(field==='payment'?page.locator('select[name="payment"]'):page.getByLabel(label,{exact:true})).toHaveValue(String(expected[field]),{timeout:1000});
   if(expected.warning)await expect(page.locator('.receipt-review ul')).toContainText(expected.warning);
   assert.deepEqual(errors,[]);assert.deepEqual(forbidden,[]);

@@ -3,6 +3,7 @@ import {Search, ArrowUpRight, CalendarDays} from 'lucide-react';
 import {berlinDate} from '../shared/daily-stats';
 
 const hints={
+  'Mein Benzin':'Privates Tankbuch, Tanken, Tankfüllung und Benzinkosten',
   Heute:'Übersicht und aktuelle Aufgaben', Tafel:'Küche und laufender Betrieb', Schicht:'Einstempeln und ausstempeln',
   Plan:'Dienstplan, Schichten, Urlaub und freie Tage', Zeiten:'Arbeitszeit und Zeitkorrekturen freigeben',
   'Meine Arbeitszeiten':'Stunden prüfen und fehlende Zeiten melden', Team:'Mitarbeiter, Rollen, Master-Zugang und PIN zurücksetzen',

@@ -31,6 +31,8 @@ try {
     }
     for(const [month,hours,value] of [['2026-09','4 Std. 00 Min.',amount],['2026-10','0 Std. 00 Min.','0,00']]) {
       await page.getByLabel('Abrechnungsmonat',{exact:true}).fill(month);
+      await expect(page.getByRole('heading',{name:'Bargeldabgaben prüfen',exact:true})).toHaveCount(0);
+      await expect(page.getByText(/Keine Bargeldübergabe oder Chef-Bestätigung erforderlich/)).toBeVisible();
       if(name==='Alex') {
         const row=page.getByRole('row').filter({has:page.getByRole('button',{name:'Alex',exact:true})});
         await expect(row).toContainText(hours);await expect(row).toContainText(value);

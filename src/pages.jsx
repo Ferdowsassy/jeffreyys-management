@@ -27,6 +27,7 @@ import {ScheduleEditor, ShiftTemplateEditor} from './schedule-editor';
 import {absenceNames, scheduleHours} from '../shared/schedule';
 import {MonthlyPayroll, Expenses, Customers, TimeMonthChart, RevenueTrend} from './operations';
 import {ClockOut} from './workspace-access';
+import {OrderTipEditor} from './driver-money';
 import {HomeShortcuts} from './everyday-tools';
 const today = () => day(Date.now());
 const person = (data, id) =>
@@ -430,61 +431,6 @@ export function Management({ user, data, page, act, notify, onAccess }) {
         />
       </Panel></>
     );
-  if (page === "Kasse")
-    body = (
-      <Panel title="Bargeld-Übergaben">
-        <div className="handoffs">
-          {data.handoffs.map((h) => (
-            <div className="handoff" key={h.id}>
-              <div>
-                <strong>{person(data, h.employeeId)}</strong>
-                <small>{new Date(h.createdAt).toLocaleString("de-DE")}</small>
-                <p>
-                  Erwartet <b>{euro(h.expected)}</b>
-                </p>
-                <Badge tone={h.driverConfirmed ? "green" : "orange"}>
-                  {h.cashRetained && !h.chefConfirmed ? "Beim Fahrer · vom Lohn abgezogen" : h.driverConfirmed
-                    ? "Fahrer bestätigt"
-                    : "Fahrerbestätigung offen"}
-                </Badge>
-              </div>
-              {h.chefConfirmed ? (
-                <div>
-                  <Badge
-                    tone={
-                      Number(h.counted) === Number(h.expected)
-                        ? "green"
-                        : "orange"
-                    }
-                  >
-                    Gezählt: {euro(h.counted)}
-                  </Badge>
-                  <p>Differenz: {euro(h.counted - h.expected)}</p>
-                </div>
-              ) : (
-                <Form
-                  fields={[
-                    moneyField(
-                      "counted",
-                      "Tatsächlich gezählt (€)",
-                      h.expected,
-                    ),
-                  ]}
-                  submit={h.cashRetained ? "Nachträgliche Bargeldabgabe bestätigen" : "Übergabe bestätigen"}
-                  onSubmit={(v) =>
-                    act("confirmHandoff", {
-                      id: h.id,
-                      counted: Number(v.counted),
-                    })
-                  }
-                />
-              )}
-            </div>
-          ))}
-          {!data.handoffs.length && <Empty>Keine Übergaben offen.</Empty>}
-        </div>
-      </Panel>
-    );
   if (page === "Kunden") body=<Customers data={data} act={act} />;
   if (page === "Zeiten") {
     const shifts = data.shifts.filter((s) => day(s.start) === date);
@@ -695,7 +641,9 @@ export function Driver({ user, data, page, act, notify, go }) {
       pattern: "[0-9]{5}",
     },
     { name: "city", label: "Ort", value: "München", required: false },
-    moneyField("amount", "Betrag (€)"),
+    moneyField("amount", "Bestellbetrag ohne Trinkgeld (€)"),
+    {...moneyField("tipOnline", "Online-Trinkgeld (€)"),value:0,required:false},
+    {...moneyField("tipCash", "Bar-Trinkgeld (€)"),value:0,required:false},
     {
       name: "payment",
       label: "Zahlungsart",
@@ -774,14 +722,14 @@ export function Driver({ user, data, page, act, notify, go }) {
               </div>
               {(user.role === "driver" || user.role === "kitchen") && (
                 <div className="shift-clock">
-                  {euro(dailyEarnings(data, user.id, active ? day(active.start) : today()).gross)}
+                  {euro(dailyEarnings(data, user.id, active ? day(active.start) : today()).totalEarnings)}
                   <span>{active ? 'Schichttag '+day(active.start) : 'Heute verdient'} · vor Bargeldabzug</span>
                   <small>Auszahlung gesamt: {euro(personalPay.payout)} · Bargeld bei dir: {euro(personalPay.retainedCash)}</small>
                 </div>
               )}
               <ClockOut active={active} act={act} />
             </div>
-          {user.role === "driver" && <details className="shift-help"><summary>Was passiert beim Ausstempeln?</summary><p>Offene Lieferungen werden als zugestellt markiert. Bargeld bleibt bei dir und wird von der Auszahlung abgezogen.</p></details>}
+          {user.role === "driver" && <details className="shift-help"><summary>Was passiert beim Ausstempeln?</summary><p>Offene Lieferungen werden als zugestellt markiert. Bargeld bleibt immer bei dir und wird automatisch von deiner Auszahlung abgezogen. Du musst nichts abgeben; der Chef muss nichts bestätigen.</p></details>}
           </Panel>
           {user.role === "driver" && (
             <div className="quick-actions">
@@ -846,6 +794,8 @@ export function Driver({ user, data, page, act, notify, go }) {
               await act("addOrder", {
                 ...v,
                 amount: Number(v.amount),
+                tipOnline: Number(v.tipOnline || 0),
+                tipCash: Number(v.tipCash || 0),
                 noAddress: v.noAddress === "true",
               });
               setForm(false);
@@ -883,6 +833,7 @@ export function Driver({ user, data, page, act, notify, go }) {
                     {euro(o.deliveryFee)}
                   </small>
                 </div>
+                <OrderTipEditor order={o} act={act} />
                 {o.source === 'winorder' && <OrderDetails order={o} role="driver" act={act} canCorrect />}
                 <div className="row navigation-actions">
                   <NavigationLinks order={o} />

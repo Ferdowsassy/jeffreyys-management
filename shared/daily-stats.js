@@ -33,7 +33,10 @@ export function dailyEarnings(data, employeeId, date, now = Date.now()) {
   const shiftIndex=shiftsById(data.shifts);
   const paidOrders=data.orders.filter(o=>o.status==='delivered' && orderWorkDate(o,shiftIndex)===date && (employeeId===null || o.employeeId===employeeId));
   const deliveryCents=paidOrders.reduce((n,o)=>n+Math.round((o.deliveryFee || 0)*100),0);
+  const onlineTips=paidOrders.reduce((n,o)=>n+Math.round((o.tipOnline || 0)*100),0);
+  const cashTips=paidOrders.reduce((n,o)=>n+Math.round((o.tipCash || 0)*100),0);
   return {hours,wages:wageCents/100,fees:deliveryCents/100,gross:(wageCents+deliveryCents)/100,
+    onlineTips:onlineTips/100,cashTips:cashTips/100,tips:(onlineTips+cashTips)/100,totalEarnings:(wageCents+deliveryCents+onlineTips+cashTips)/100,
     collectedCash:paidOrders.filter(o=>o.payment==='cash').reduce((n,o)=>n+Math.round((o.amount || 0)*100),0)/100,
     provisional:shifts.some(s=>!s.end && Date.parse(s.start)<=now)};
 }

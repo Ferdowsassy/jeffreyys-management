@@ -130,6 +130,11 @@ export function parseWinorder(body, now = new Date().toISOString()) {
     if (!street || !/^\d{5}$/.test(postalCode) || !city) issues.push('Lieferadresse ergänzen');
     if (amount === null) issues.push('Gesamtbetrag prüfen');
     if (paymentType === null) issues.push('Zahlungsart prüfen');
+    const importedTip = info.Tip === undefined || info.Tip === '' ? 0 : currency(info.Tip);
+    if (importedTip === null || (importedTip > 0 && (!paymentType || amount === null || importedTip > amount)))
+      issues.push('Trinkgeld prüfen');
+    // Total is the payable total; separate a valid included tip from restaurant sales.
+    const tip = importedTip !== null && paymentType && amount !== null && importedTip <= amount ? importedTip : 0;
     // Invoice totals are authoritative; item prices/toppings are retained as delivery details,
     // not mixed into the existing article revenue report without price reconciliation.
     const articles = list(order.ArticleList?.Article);
@@ -142,7 +147,8 @@ export function parseWinorder(body, now = new Date().toISOString()) {
     }).join('\n');
     if (description.length > 16000) fail('WinOrder article details too long');
     const record = {externalOrderId, externalKey, createdAt, source:'winorder', address:street, postalCode, city,
-      amount, payment:paymentType, paymentLabel, orderNumber:externalOrderId, reviewIssues:issues,
+      amount:tip ? Math.round((amount-tip)*100)/100 : amount,
+      tipOnline:paymentType==='online'?tip:0,tipCash:paymentType==='cash'?tip:0, payment:paymentType, paymentLabel, orderNumber:externalOrderId, reviewIssues:issues,
       customerName:[scalar(address.FirstName, 100), scalar(address.LastName, 100)].filter(Boolean).join(' '),
       customerPhone:scalar(address.PhoneNo || address.Mobile, 60),
       deliveryNotes:[scalar(address.AddAddress), scalar(address.DescriptionOfWay, 1000), scalar(info.Comment, 1000)].filter(Boolean).join('\n'),
@@ -174,6 +180,26 @@ export function importWinorder(state, orders, now = new Date().toISOString()) {
         }
       }
       if (existing.sourceHash === order.sourceHash) { results.duplicates++; continue; }
+      // Recognize retries from both earlier parser representations. Compare source
+      // hashes, never current accounting fields, which may have been corrected.
+      const {winorderDetails, sourceHash, tipOnline, tipCash, ...beforeTips} = order;
+      const previousHashes = [];
+      // The first tip-aware parser omitted zero tip fields from its hash.
+      if (!tipOnline && !tipCash)
+        previousHashes.push(hash(JSON.stringify({...beforeTips, createdAt:null, winorderDetails:canonicalDetails(winorderDetails)})).toString('hex'));
+      if (winorderDetails) {
+        // Before tips were tracked, amount was the full source total and tip
+        // validation did not contribute review issues to the hashed record.
+        beforeTips.amount = currency(winorderDetails.AddInfo?.Total);
+        beforeTips.reviewIssues = beforeTips.reviewIssues.filter(issue => issue !== 'Trinkgeld prüfen');
+        previousHashes.push(hash(JSON.stringify({...beforeTips, createdAt:null, winorderDetails:canonicalDetails(winorderDetails)})).toString('hex'));
+        previousHashes.push(hash(JSON.stringify({...beforeTips, createdAt:null})).toString('hex'));
+      }
+      if (previousHashes.includes(existing.sourceHash)) {
+        // Enrich metadata only; do not reinterpret historical amounts or tips.
+        Object.assign(existing, {winorderDetails, sourceHash});
+        results.duplicates++; continue;
+      }
       if (!['available','review'].includes(existing.status)) fail('This WinOrder order was already assigned or closed; review the change with the chef', 409);
       Object.assign(existing, order, {createdAt:existing.createdAt, status:'available', updatedAt:now});
       results.updated++;

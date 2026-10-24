@@ -21,6 +21,7 @@ export function seed() {
     day: "2-digit",
   }).format(now);
   return {
+    driverFuel: [],
     expenses: [],
     salaryPayments: [],
     employees: [
@@ -200,7 +201,7 @@ export function seed() {
 export function bootstrapState({ name, pin } = {}) {
   if (typeof name !== "string" || !name.trim() || name.length > 80 || !/^\d{8,12}$/.test(pin || ""))
     throw new Error("New store requires bootstrap name and an 8–12 digit PIN (BOOTSTRAP_PIN_FILE)");
-  return {employees:[{id:randomBytes(16).toString("hex"),name:name.trim(),role:"chef",pinHash:hashPin(pin),hourlyRate:0,active:true,wageHistory:[{effectiveDate:"2020-01-01",hourlyRate:0}],demo:false}],orders:[],expenses:[],salaryPayments:[],shiftRequests:[],shifts:[],schedule:[],zones:[],tasks:[],handoffs:[],audit:[],settings:{foodCostPercent:30,fixedCosts:0,longShiftHours:8,flatFee:0,demo:false}};
+  return {employees:[{id:randomBytes(16).toString("hex"),name:name.trim(),role:"chef",pinHash:hashPin(pin),hourlyRate:0,active:true,wageHistory:[{effectiveDate:"2020-01-01",hourlyRate:0}],demo:false}],orders:[],driverFuel:[],expenses:[],salaryPayments:[],shiftRequests:[],shifts:[],schedule:[],zones:[],tasks:[],handoffs:[],audit:[],settings:{foodCostPercent:30,fixedCosts:0,longShiftHours:8,flatFee:0,demo:false}};
 }
 export async function createStore(file, { demo = false, bootstrap } = {}) {
   file = resolve(file);
@@ -228,9 +229,10 @@ export async function createStore(file, { demo = false, bootstrap } = {}) {
     catch (e) { if (e.code !== "ENOENT") throw e; state = demo ? seed() : bootstrapState(bootstrap); }
     state.shiftRequests ??= [];
     state.expenses ??= [];
+    state.driverFuel ??= [];
     state.salaryPayments ??= [];
     if (!Array.isArray(state.shiftRequests)) throw new Error("Invalid store: shiftRequests");
-    for (const key of ["employees","orders","shifts","schedule","zones","tasks","handoffs","audit","expenses","salaryPayments"])
+    for (const key of ["employees","orders","shifts","schedule","zones","tasks","handoffs","audit","expenses","salaryPayments","driverFuel"])
       if (!Array.isArray(state[key])) throw new Error(`Invalid store: ${key}`);
     if (!state.settings || !state.employees.some(e => e.active && e.role === "chef")) throw new Error("Invalid store: settings or active chef missing");
     await persist(state);

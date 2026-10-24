@@ -75,11 +75,13 @@ export function OrderDetails({order,act,canCorrect=false,role='chef',showPayment
     {role==='chef' && showPayment && <p>{order.amount==null ? 'Betrag fehlt' : euro(order.amount)} · {order.payment==='cash' ? 'Bar kassieren' : order.payment==='online' ? 'Bereits bezahlt' : 'Zahlungsart fehlt'}{order.paymentLabel && <> · {order.paymentLabel}</>}</p>}
     {order.reviewIssues?.length>0 && <div className="notice">{order.reviewIssues.join(' · ')}</div>}
     {canCorrect && act && order.reviewIssues?.length>0 && <details><summary>Angaben ergänzen</summary>
-      <Form initial={{...order,amount:order.amount ?? '',payment:order.payment || ''}}
+      <Form initial={{...order,amount:order.amount ?? '',payment:order.payment || '',tipOnline:order.tipOnline || 0,tipCash:order.tipCash || 0}}
         fields={[{name:'address',label:'Straße & Hausnummer'},{name:'postalCode',label:'PLZ',pattern:'[0-9]{5}'},{name:'city',label:'Ort'},
-          {name:'amount',label:'Gesamtbetrag (€)',type:'number',min:0,step:0.01},
+          {name:'amount',label:'Bestellbetrag ohne Trinkgeld (€)',type:'number',min:0,step:0.01},
+          {name:'tipOnline',label:'Online-Trinkgeld (€)',type:'number',min:0,step:0.01},
+          {name:'tipCash',label:'Bar-Trinkgeld (€)',type:'number',min:0,step:0.01},
           {name:'payment',label:'Zahlungsart',options:[{value:'',label:'Bitte wählen'},{value:'cash',label:'Bar kassieren'},{value:'online',label:'Bereits bezahlt'}]}]}
-        submit="Angaben speichern" onSubmit={async values=>{setError('');try{await act('reviewImportedOrder',{id:order.id,...values,amount:Number(values.amount)});}catch(e){setError(e.message);}}} />
+        submit="Angaben speichern" onSubmit={async values=>{setError('');try{await act('reviewImportedOrder',{id:order.id,...values,amount:Number(values.amount),tipOnline:Number(values.tipOnline),tipCash:Number(values.tipCash)});}catch(e){setError(e.message);}}} />
       {error && <p role="alert">{error}</p>}
     </details>}
     {role!=='driver' && <details className="order-articles" open={role==='kitchen' ? true : undefined}><summary>Bestellte Artikel</summary>
