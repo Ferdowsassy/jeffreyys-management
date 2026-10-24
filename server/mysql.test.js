@@ -75,12 +75,13 @@ test('real MySQL preserves migration, rolls back, survives restart and serialize
   assert.equal((await request('/api/action',{type:'delivered',id:order.id},driver)).status,200);
   assert.equal((await request('/api/action',{type:'clockOut',cashConfirmed:true},driver)).status,200);
   const state=(await request('/api/state',undefined,chef)).body;
-  const handoff=state.handoffs.find(h=>h.employeeId==='leo');
-  assert.equal((await request('/api/action',{type:'confirmHandoff',id:handoff.id,counted:50},chef)).status,200);
+  assert.equal(state.handoffs.some(h=>h.employeeId==='leo'),false);
+  assert.equal((await request('/api/action',{type:'confirmHandoff',id:'demo-handoff',counted:50},chef)).status,410);
   const payroll=(await request('/api/state',undefined,chef)).body.payroll.find(p=>p.employeeId==='leo');
-  assert.equal(payroll.retainedCash,2.6);
+  assert.equal(payroll.retainedCash,52.6);
   await reopened.refresh();
-  assert.ok(reopened.read().handoffs.find(h=>h.id===handoff.id).chefConfirmed);
+  assert.ok(reopened.read().orders.find(o=>o.id===order.id).status==='delivered');
+  assert.equal(reopened.read().handoffs.some(h=>h.employeeId==='leo'),false);
   const sse=await fetch(base+'/api/events',{headers:{cookie:chef}});
   const reader=sse.body.getReader();
   await reader.read();

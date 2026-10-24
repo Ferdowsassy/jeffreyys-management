@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fixture } from "./test-helper.js";
-test("driver shift lifecycle snapshots rates and deducts only retained cash", async (t) => {
+test("driver cash is deducted automatically without handoffs or chef approval", async (t) => {
   const { request, login } = await fixture(t);
   const driver = await login("leo", "3456"),
     chef = await login("alex", "1234");
@@ -30,20 +30,17 @@ test("driver shift lifecycle snapshots rates and deducts only retained cash", as
   assert.equal(afterClockOut.orders.find(o=>o.id===order.id).status,"delivered");
   assert.equal(afterClockOut.orders.find(o=>o.id===order.id).completionSource,"clockOut");
   let state = (await request("/api/state", undefined, chef)).body;
-  const h = state.handoffs.find((h) => h.employeeId === "leo");
-  assert.equal(h.expected, 52.6);
-  assert.equal(h.driverConfirmed, false);
-  assert.equal(h.cashRetained, true);
-  assert.equal(
-    (await act({ type: "confirmHandoff", id: h.id, counted: 50 }, chef)).status,
-    200,
-  );
-  state = (await request("/api/state", undefined, chef)).body;
-  const p = state.payroll.find((p) => p.employeeId === "leo");
-  assert.equal(p.collectedCash, 52.6);
-  assert.equal(p.returnedCash, 50);
-  assert.equal(p.retainedCash, 2.6);
-  assert.equal(Math.round(p.payout * 100), Math.round(p.gross * 100) - 260);
+  assert.equal(state.handoffs.some(h=>h.employeeId==='leo'),false);
+  assert.equal((await act({type:'confirmHandoff',id:'demo-handoff',counted:50},chef)).status,410);
+  state=(await request('/api/state',undefined,chef)).body;
+  const p=state.payroll.find(p=>p.employeeId==='leo');
+  assert.equal(p.collectedCash,52.6);
+  assert.equal(p.returnedCash,0);
+  assert.equal(p.retainedCash,52.6);
+  assert.equal(p.pendingHandoffs,0);
+  assert.equal(Math.round(p.payout*100),Math.round(p.gross*100)-5260);
+  assert.equal((await act({type:'clockOut'})).status,409);
+  assert.equal((await request('/api/state',undefined,chef)).body.payroll.find(p=>p.employeeId==='leo').retainedCash,52.6);
   assert.equal(
     (await act({ type: "delivered", id: "demo-order-2" })).status,
     403,
