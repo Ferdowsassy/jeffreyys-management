@@ -3,7 +3,7 @@ import { access } from "node:fs/promises";
 import { resolve } from "node:path";
 import { randomBytes,createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { createStore, safeEmployee, checkPin } from "./store.js";
+import { createStore, safeEmployee, checkPin, hashPin } from "./store.js";
 import { createMysqlStore } from "./mysql-store.js";
 import {prepareReturnTrip, searchStore} from "./return-routing.js";
 import {resolveReceiptMaps} from "./receipt-maps.js";
@@ -101,6 +101,7 @@ export async function createApp({
       sessions.delete(token);
       return null;
     }
+    if(session.chefId && !store.read().employees.some(e=>e.id===session.chefId && e.active && e.role==='chef' && e.pinHash===session.chefPinHash))return null;
     return (
       store.read().employees.find((e) => e.id === session.id && e.active) ||
       null
@@ -134,8 +135,9 @@ export async function createApp({
     req.user = currentSessionUser(req.token);
     next();
   });
+  const accessInfo=token=>sessions.get(token)?.chefId ? {access:{chefName:store.read().employees.find(e=>e.id===sessions.get(token).chefId)?.name}} : {};
   app.get("/api/session", (req, res) =>
-    res.json({ user: req.user ? sessionUser(req.user) : null }),
+    res.json({ user: req.user ? sessionUser(req.user) : null, ...(req.user?accessInfo(req.token):{}) }),
   );
   app.get("/api/people", (req, res) =>
     res.json({
@@ -146,15 +148,15 @@ export async function createApp({
         .map(({ id, name, role }) => ({ id, name, role })),
     }),
   );
-  const signIn=(req,res,employee)=>{
+  const signIn=(req,res,employee,chef)=>{
     if(req.token)closeSession(req.token);
     const token=randomBytes(32).toString('hex');
-    sessions.set(token,{id:employee.id,expires:Date.now()+43200000});
+    sessions.set(token,{id:employee.id,expires:Date.now()+43200000,...(chef?{chefId:chef.id,chefPinHash:chef.pinHash}:{})});
     res.cookie('jeffreyys_session',token,{httpOnly:true,sameSite:'strict',secure:secureCookie,maxAge:43200000,path:'/'});
-    res.json({user:sessionUser(employee)});
+    res.json({user:sessionUser(employee),...accessInfo(token)});
   };
   mountPasskeys(app,{store,origin,production,signIn});
-  app.post("/api/login", (req, res) => {
+  const credentialLimit=(req,res,next)=>{
     const key = req.ip;
     let item = attempts.get(key);
     if (!item || item.until < Date.now()) {
@@ -167,18 +169,31 @@ export async function createApp({
         .status(429)
         .json({ error: "Too many login attempts. Try again in 15 minutes." });
     }
-    const { id, pin } = req.body || {};
+    next();
+  };
+  app.post("/api/login", credentialLimit, async (req, res, next) => {
+    try {
+    const { id, pin, chefId } = req.body || {};
     const employee = store
       .read()
       .employees.find((e) => e.id === id && e.active);
+    const chef=chefId ? store.read().employees.find(e=>e.id===chefId && e.role==='chef' && e.active) : null;
     if (
       typeof pin !== "string" ||
       !/^\d{4,12}$/.test(pin) ||
       !employee ||
-      !checkPin(pin, employee.pinHash)
+      (chefId ? !chef || !checkPin(pin,chef.pinHash) : !checkPin(pin, employee.pinHash))
     )
       return res.status(401).json({ error: "Invalid name or PIN" });
-    signIn(req,res,employee);
+    if(chefId)await store.transact(state=>{
+      const actor=state.employees.find(e=>e.id===chef.id && e.active && e.role==='chef');
+      const target=state.employees.find(e=>e.id===employee.id && e.active);
+      if(!actor || !target || !checkPin(pin,actor.pinHash))fail('Invalid name or PIN',401);
+      state.audit.push({id:randomBytes(16).toString('hex'),createdAt:new Date().toISOString(),employeeId:actor.id,type:'masterLogin',targetId:target.id,demo:false});
+      if(state.audit.length>10000)state.audit=state.audit.slice(-10000);
+    });
+    signIn(req,res,employee,chef);
+    }catch(error){next(error);}
   });
   app.post("/api/logout", async (req, res, next) => {
     closeSession(req.token);
@@ -225,6 +240,32 @@ export async function createApp({
     req.user ? next() : res.status(401).json({ error: "Sign in required" }),
   );
   const notifyPush=mountNotifications(app,{store});
+  app.post('/api/account/return', (req,res,next)=>{
+    try {
+      const session=sessions.get(req.token);
+      const chef=store.read().employees.find(e=>e.id===session?.chefId && e.active && e.role==='chef' && e.pinHash===session.chefPinHash);
+      if(!chef)fail('Kein Chef-Zugang aktiv.',403);
+      signIn(req,res,chef);
+    }catch(error){next(error);}
+  });
+  app.post('/api/account/pin', credentialLimit, async(req,res,next)=>{
+    try {
+      if(sessions.get(req.token)?.chefId)fail('PIN nur im eigenen Konto ändern. Der Chef kann sie unter Team zurücksetzen.',403);
+      const {currentPin,newPin,confirmPin}=req.body || {};
+      if(typeof currentPin!=='string' || !/^\d{4,12}$/.test(currentPin) || typeof newPin!=='string' || !/^\d{4,12}$/.test(newPin))fail('Bitte eine PIN mit 4–12 Ziffern verwenden.');
+      if(newPin!==confirmPin)fail('Die neuen PINs stimmen nicht überein.');
+      await store.transact(state=>{
+        const employee=state.employees.find(e=>e.id===req.user.id && e.active);
+        if(!employee || !checkPin(currentPin,employee.pinHash))fail('Aktuelle PIN ist falsch.',401);
+        employee.pinHash=hashPin(newPin);
+        state.audit.push({id:randomBytes(16).toString('hex'),createdAt:new Date().toISOString(),employeeId:employee.id,type:'changeOwnPin',demo:false});
+        if(state.audit.length>10000)state.audit=state.audit.slice(-10000);
+      });
+      for(const [token,session] of sessions)if(session.id===req.user.id || session.chefId===req.user.id)closeSession(token);
+      invalidate();
+      signIn(req,res,store.read().employees.find(e=>e.id===req.user.id));
+    }catch(error){next(error);}
+  });
   app.get('/api/payroll.pdf',async(req,res,next)=>{try{
     const month=req.query.month;
     if(typeof month!=='string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month))fail('Bitte einen gültigen Monat wählen.');
@@ -306,9 +347,15 @@ export async function createApp({
         const current = s.employees.find(
           (e) => e.id === req.user.id && e.active,
         );
-        if (!current) fail("Sign in required", 401);
+        if (!current || !sessions.has(req.token)) fail("Sign in required", 401);
+        const access=sessions.get(req.token);
+        if(access?.chefId && !s.employees.some(e=>e.id===access.chefId && e.active && e.role==='chef' && e.pinHash===access.chefPinHash))fail('Chef-Zugang abgelaufen.',401);
         if (req.body.type === "reset" && !demo) fail("Demo reset disabled", 403);
-        return action(s, current, req.body, { minPinLength: 4, returnTrip });
+        const previousAuditId=s.audit.at(-1)?.id;
+        const result=action(s, current, req.body, { minPinLength: 4, returnTrip });
+        const chefId=sessions.get(req.token)?.chefId;
+        if(chefId && s.audit.at(-1)?.id!==previousAuditId && s.audit.at(-1)?.employeeId===current.id)s.audit.at(-1).performedBy=chefId;
+        return result;
       });
       const state = store.read(),
         current = state.employees.find((e) => e.id === req.user.id && e.active);
@@ -316,7 +363,7 @@ export async function createApp({
         for (const token of sessions.keys()) closeSession(token);
       if (req.body.type === "saveEmployee" && req.body.pin && req.body.id)
         for (const [token, session] of sessions)
-          if (session.id === req.body.id && token !== req.token)
+          if ((session.id === req.body.id || session.chefId === req.body.id) && token !== req.token)
             closeSession(token);
       invalidate();
       const type=req.body.type;

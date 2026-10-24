@@ -71,7 +71,7 @@ try {
 
   await login('Driver Test', '33334444');
   await checkPersonalAccess();
-  await expect(page.getByRole('button', { name: 'Schicht', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Meine Schicht', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Team', exact: true })).toHaveCount(0);
   await page.screenshot({ path: evidence + '/production-roles.png', fullPage: true });
   if (errors.length) throw new Error(errors.join('\n'));

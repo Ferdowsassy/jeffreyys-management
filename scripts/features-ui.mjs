@@ -27,7 +27,7 @@ async function login(name,pin) {
   await page.getByRole('button',{name:'Anmelden',exact:true}).click();
   await page.locator('.sidebar').waitFor();
 }
-async function nav(name) {await page.locator('.sidebar').getByRole('button',{name,exact:true}).click();}
+async function nav(name) {name=({Plan:'Stundenplan',Zeiten:'Arbeitszeiten',Analyse:'Betriebsanalyse',Geld:'Lohnabrechnung',Belege:'Meine Belege',Tour:'Meine Tour'})[name] || name;await page.locator('.sidebar').getByRole('button',{name,exact:true}).click();}
 try {
   await login('Alex','1234');
   await nav('Team');
@@ -62,7 +62,7 @@ try {
   await expect(articleTable).toContainText('19,00');
   await page.screenshot({path:evidence + '/features-analytics.png',fullPage:true});
   await nav('Plan');
-  await page.locator('.week-day').first().getByRole('button',{name:'+ Schicht',exact:true}).click();
+  await page.locator('.week-day').first().getByRole('button',{name:/Schicht am .* hinzufügen/}).click();
   await page.getByLabel('Mitarbeiter',{exact:true}).selectOption('samira');
   await page.getByLabel('Beginn',{exact:true}).fill('22:00');
   await page.getByLabel('Ende',{exact:true}).fill('02:00');

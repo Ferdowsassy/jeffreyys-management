@@ -33,6 +33,7 @@ import { useDriverLocation } from "./location-sharing";
 import {OrderQueue} from './order-queue';
 import {AccountSettings,passkeyLogin} from './workspace-access';
 import {periodStats} from '../shared/accounting';
+import {PageFinder,HomeShortcuts} from './everyday-tools';
 const DailyStatistics = lazy(() => import("./daily-statistics"));
 const LiveDriverMap = lazy(() => import("./driver-map"));
 
@@ -81,7 +82,7 @@ export function Panel({ title, subtitle, action, children, className = "" }) {
   );
 }
 export function Form({ fields, onSubmit, submit = "Speichern", initial = {}, children, disabled = false }) {
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(false), [error,setError]=useState("");
   return (
     <form
       className="form-grid"
@@ -89,9 +90,11 @@ export function Form({ fields, onSubmit, submit = "Speichern", initial = {}, chi
         e.preventDefault();
         const f = e.currentTarget;
         const values = Object.fromEntries(new FormData(f));
-        setBusy(true);
+        setBusy(true);setError('');
         try {
           await onSubmit(values);
+        } catch(error) {
+          setError(error.message || 'Speichern fehlgeschlagen. Bitte erneut versuchen.');
         } finally {
           setBusy(false);
         }
@@ -131,6 +134,7 @@ export function Form({ fields, onSubmit, submit = "Speichern", initial = {}, chi
         </label>
       ))}
       {children}
+      {error && <p className="form-error" role="alert">{error}</p>}
       <button className="primary" disabled={busy || disabled}>
         {busy ? "Wird gespeichert …" : submit}
       </button>
@@ -139,9 +143,11 @@ export function Form({ fields, onSubmit, submit = "Speichern", initial = {}, chi
 }
 function Login({ onLogin, notify }) {
   const [people, setPeople] = useState([]),
+    [peopleQuery,setPeopleQuery]=useState(""),
     [demoMode, setDemoMode] = useState(false),
     [selected, setSelected] = useState(null),
     [pin, setPin] = useState(""),
+    [master,setMaster]=useState(false),[chefId,setChefId]=useState(""),
     [busy, setBusy] = useState(false);
   useEffect(() => {
     api("people")
@@ -188,7 +194,9 @@ function Login({ onLogin, notify }) {
         </p>
         {!selected ? (
           <div className="people">
-            {people.map((p) => (
+            <label className="people-search">Name finden<input type="search" value={peopleQuery} onChange={event=>setPeopleQuery(event.target.value)} placeholder="Deinen Namen eingeben …" autoComplete="off" /></label>
+            {!people.some(person=>person.name.toLocaleLowerCase('de-DE').includes(peopleQuery.trim().toLocaleLowerCase('de-DE'))) && <p role="status">Kein Name gefunden. Suche zurücksetzen oder die Leitung fragen.</p>}
+            {people.filter(person=>person.name.toLocaleLowerCase('de-DE').includes(peopleQuery.trim().toLocaleLowerCase('de-DE'))).map((p) => (
               <button key={p.id} onClick={() => setSelected(p)}>
                 <span className="avatar">{p.name.slice(0, 2)}</span>
                 <span>
@@ -205,7 +213,7 @@ function Login({ onLogin, notify }) {
               e.preventDefault();
               setBusy(true);
               try {
-                await api("login", { id: selected.id, pin });
+                await api("login", { id: selected.id, pin, ...(master?{chefId:chefId || people.find(p=>p.role==='chef')?.id}:{}) });
                 await onLogin();
               } catch (e) {
                 notify(e.message);
@@ -215,8 +223,10 @@ function Login({ onLogin, notify }) {
               }
             }}
           >
+            <label className="access-choice"><input type="checkbox" checked={master} onChange={e=>{setMaster(e.target.checked);setPin('');}} /> Chef-Zugang mit Master-PIN</label>
+            {master && <><p>Chef-PIN eingeben. Der Zugriff auf {selected.name} wird protokolliert.</p><label>Chef-Konto<select value={chefId || people.find(p=>p.role==='chef')?.id || ''} onChange={e=>setChefId(e.target.value)}>{people.filter(p=>p.role==='chef').map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label></>}
             <label className="pin-label">
-              PIN
+              {master?'Chef-PIN':'PIN'}
               <input
                 autoFocus
                 type="password"
@@ -233,7 +243,7 @@ function Login({ onLogin, notify }) {
             <button className="primary full" disabled={busy}>
               Anmelden <ArrowUpRight size={18} />
             </button>
-            {window.PublicKeyCredential && <button type="button" className="secondary full" disabled={busy} onClick={async()=>{
+            {!master && window.PublicKeyCredential && <button type="button" className="secondary full" disabled={busy} onClick={async()=>{
               setBusy(true);try{await passkeyLogin(selected.id);await onLogin();}catch(e){notify(e.name==='NotAllowedError'?'Anmeldung abgebrochen.':e.message);}finally{setBusy(false);}
             }}>Mit Face ID / Passkey anmelden</button>}
             <button
@@ -241,6 +251,7 @@ function Login({ onLogin, notify }) {
               className="text-button full"
               onClick={() => {
                 setSelected(null);
+                setMaster(false);
                 setPin("");
               }}
             >
@@ -266,24 +277,17 @@ function Login({ onLogin, notify }) {
     </div>
   );
 }
+const navLabel={Plan:'Stundenplan',Geld:'Lohnabrechnung',Zeiten:'Arbeitszeiten',Tafel:'Küchenübersicht',Schicht:'Meine Schicht',Finanzen:'Kosten & Ausgaben',Daten:'Daten & Export',Gebiete:'Liefergebiete',Analyse:'Betriebsanalyse',Belege:'Meine Belege',Tour:'Meine Tour'};
+const navGroup=label=>['Heute','Tafel','Schicht','Bestellungen','Tour','Belege','Aufgaben'].includes(label)?'TÄGLICHE ARBEIT':['Plan','Zeiten','Meine Arbeitszeiten','Team','Gebiete'].includes(label)?'TEAM & PLANUNG':['Geld','Verdienst','Mein Verdienst','Finanzen','Analyse','Statistik','Kunden'].includes(label)?'ZAHLEN & ÜBERSICHT':'EINSTELLUNGEN & KONTO';
 const chefNav = [
-  ["Heute", LayoutDashboard],
-  ["Bestellungen", Truck],
-  ["Plan", CalendarDays],
-  ["Geld", Wallet],
-  ["Analyse", ChartNoAxesCombined],
-  ["Statistik", ChartNoAxesCombined],
-  ["Kunden", Users],
-  ["Zeiten", Clock],
-  ["Team", Users],
-  ["Gebiete", MapPin],
-  ["Aufgaben", ClipboardList],
-  ["Finanzen", Settings],
-  ["Einstellungen", Settings],
-  ["Daten", Database],
+  ["Heute", LayoutDashboard], ["Bestellungen", Truck], ["Aufgaben", ClipboardList],
+  ["Plan", CalendarDays], ["Zeiten", Clock], ["Team", Users], ["Gebiete", MapPin],
+  ["Geld", Wallet], ["Finanzen", Settings], ["Analyse", ChartNoAxesCombined], ["Statistik", ChartNoAxesCombined], ["Kunden", Users],
+  ["Einstellungen", Settings], ["Daten", Database],
 ];
 function App() {
   const [user, setUser] = useState(null),
+    [access,setAccess]=useState(null),
     [data, setData] = useState(null),
     [loading, setLoading] = useState(true),
     [page, setPage] = useState("Heute"),
@@ -298,6 +302,7 @@ function App() {
   const refresh = useCallback(async () => {
     const s = await api("session");
     setUser(s.user);
+    setAccess(s.access || null);
     if (s.user) setData(await api("state"));
     else setData(null);
     setLoading(false);
@@ -392,7 +397,8 @@ function App() {
             ["Meine Arbeitszeiten", Clock],
             ["Statistik", ChartNoAxesCombined],
           ];
-  const nav=[...roleNav,["Mein Zugang",Fingerprint]];
+  const groups=['TÄGLICHE ARBEIT','TEAM & PLANUNG','ZAHLEN & ÜBERSICHT','EINSTELLUNGEN & KONTO'];
+  const nav=[...roleNav,["Mein Zugang",Fingerprint]].sort((a,b)=>groups.indexOf(navGroup(a[0]))-groups.indexOf(navGroup(b[0])));
   const current = nav.some((n) => n[0] === page) ? page : nav[0][0];
   const pendingCorrections = (data.shiftRequests || []).filter(r => r.status === "pending").length;
   const demo =
@@ -416,16 +422,15 @@ function App() {
         <nav>
           {nav.map(([label, Icon], i) => (
             <React.Fragment key={label}>
-              {user.role === "chef" && i === 3 && (
-                <div className="nav-caption">BETRIEB & VERWALTUNG</div>
-              )}
+              {(i===0 || navGroup(nav[i-1][0])!==navGroup(label)) && <div className="nav-caption">{navGroup(label)}</div>}
               <button
+                aria-label={navLabel[label] || label}
                 aria-current={current === label ? "page" : undefined}
                 className={current === label ? "nav-item active" : "nav-item"}
                 onClick={() => go(label)}
               >
                 <Icon size={19} />
-                {label}
+                {navLabel[label] || label}
                 {label === "Zeiten" && user.role === "chef" && pendingCorrections > 0 && <span className="nav-count">{pendingCorrections}</span>}
                 {label === 'Bestellungen' && (data.availableOrders || []).length > 0 && <span className="nav-count">{data.availableOrders.length}</span>}
                 {label === "Aufgaben" && (
@@ -440,10 +445,10 @@ function App() {
         <InstallApp />
         <div className="sidebar-bottom">
           <span className="avatar orange">{user.name.slice(0, 2)}</span>
-          <div>
+          <button className="account-shortcut" aria-label="Mein Zugang öffnen" onClick={()=>go('Mein Zugang')}>
             <strong>{user.name}</strong>
-            <small>{roleName[user.role]}</small>
-          </div>
+            <small>{roleName[user.role]} · Mein Zugang</small>
+          </button>
           <button
             aria-label="Abmelden"
             className="icon-button"
@@ -474,9 +479,10 @@ function App() {
             </button>
             <span>Workspace</span>
             <ChevronRight size={14} />
-            <strong>{current}</strong>
+            <strong>{navLabel[current] || current}</strong>
           </div>
           <div className="row">
+            <PageFinder nav={nav} labels={navLabel} go={go} />
             <span className={"connection " + (connected ? "" : "offline")}>
               <i />
               {connected ? "Live verbunden" : "Verbindung wird aufgebaut"}
@@ -491,6 +497,7 @@ function App() {
           </div>
         </header>
         <main className="content">
+          {access && <div className="notice master-access" role="status"><div><strong>Chef-Zugang: {user.name}</strong><p>Angemeldet durch {access.chefName}. Änderungen gelten für dieses Konto und werden protokolliert.</p></div><button className="secondary" onClick={async()=>{try{await api('account/return',{});await refresh();go('Heute');}catch(error){notify(error.message);}}}>Zurück zum Chef-Konto</button></div>}
           {user.role === "chef" && pendingCorrections > 0 && <div className="notice location-sharing" role="status">
             <strong>{pendingCorrections} Zeitkorrektur-Anfrage(n) warten auf deine Entscheidung.</strong>
             <button className="secondary" onClick={() => go("Zeiten")}>Anfragen prüfen</button>
@@ -507,19 +514,20 @@ function App() {
               <span>Kein Live-Betrieb</span>
             </div>
           )}
-          {current==='Mein Zugang' ? <><Title title="Mein Zugang" subtitle={`Persönliche Anmeldung und Benachrichtigungen für ${user.name}.`} /><AccountSettings user={user} notify={notify} /></> : current === 'Bestellungen' ? (
+          {current==='Mein Zugang' ? <><Title title="Mein Zugang" subtitle={`Persönliche Anmeldung und Benachrichtigungen für ${user.name}.`} /><AccountSettings key={user.id} user={user} notify={notify} access={access} onChanged={refresh} /></> : current === 'Bestellungen' ? (
             <OrderQueue user={user} data={data} act={act} />
           ) : current === "Meine Arbeitszeiten" ? (
             <><Title title="Meine Arbeitszeiten" subtitle="Schichten prüfen und fehlende Zeiten melden." /><ShiftCorrections user={user} data={data} act={act} /></>
           ) : current === "Statistik" ? (
             <Suspense fallback={<p>Statistik wird geladen …</p>}><DailyStatistics user={user} data={data} /></Suspense>
           ) : current === "Heute" ? (
-            <Dashboard data={data} go={go} act={act} />
+            <Dashboard user={user} data={data} go={go} act={act} />
           ) : current === "Tafel" ? (
             <>
               <Title
                 title="Küchenübersicht"
               />
+              <HomeShortcuts user={user} data={data} go={go} />
               <Driver
                 user={user}
                 data={data}
@@ -546,6 +554,7 @@ function App() {
           ) : user.role === "driver" ? (
             <Driver
               user={user}
+              go={go}
               data={data}
               page={current}
               act={act}
@@ -553,6 +562,7 @@ function App() {
             />
           ) : (
             <Management
+              onAccess={async()=>{await refresh();go('Heute');}}
               key={current}
               user={user}
               data={data}
@@ -685,7 +695,7 @@ export function Drivers({ data }) {
     </Panel>
   );
 }
-function Dashboard({ data, go, act }) {
+function Dashboard({ user, data, go, act }) {
   const today = day(Date.now()), summary=periodStats(data,{role:'chef'},'day',today),
     orders=summary.orders,revenue=summary.revenue,cash=summary.cash,wages=summary.wages,
     food=summary.estimatedFood,fixed=summary.estimatedFixed,profit=summary.profit,
@@ -711,7 +721,7 @@ function Dashboard({ data, go, act }) {
   return (
     <>
       <Title
-        title="Ein guter Tag für gute Burger."
+        title="Heute im Überblick"
         subtitle={new Date().toLocaleDateString("de-DE", {
           weekday: "long",
           day: "numeric",
@@ -724,6 +734,7 @@ function Dashboard({ data, go, act }) {
           Zur Analyse <ArrowUpRight size={17} />
         </button>
       </Title>
+      <HomeShortcuts user={user} data={data} go={go} />
       <div className="metrics">
         <div className="metric featured">
           <span>

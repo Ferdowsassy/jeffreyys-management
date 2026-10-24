@@ -27,6 +27,7 @@ import {ScheduleEditor, ShiftTemplateEditor} from './schedule-editor';
 import {absenceNames, scheduleHours} from '../shared/schedule';
 import {MonthlyPayroll, Expenses, Customers, TimeMonthChart, RevenueTrend} from './operations';
 import {ClockOut} from './workspace-access';
+import {HomeShortcuts} from './everyday-tools';
 const today = () => day(Date.now());
 const person = (data, id) =>
   data.employees.find((e) => e.id === id)?.name || "Unbekannt";
@@ -110,8 +111,8 @@ export function Schedule({ user, data, act }) {
   return (
     <>
       <Title
-        title="Ein Team. Ein Plan."
-        subtitle="Der Wochenplan für einen reibungslosen Betrieb."
+        title="Stundenplan"
+        subtitle="Küche und Fahrer getrennt planen. Schichten und freie Tage auf einen Blick."
       >
         {user.role === "chef" && (
           <button className="primary" onClick={() => {setEditing(null);setShow(!show);}}>
@@ -130,7 +131,7 @@ export function Schedule({ user, data, act }) {
             <ChevronLeft size={18} />
           </button>
           <strong>
-            {days[0]} — {days[6]}
+            {new Date(days[0]+'T12:00').toLocaleDateString('de-DE',{day:'numeric',month:'short'})} — {new Date(days[6]+'T12:00').toLocaleDateString('de-DE',{day:'numeric',month:'short',year:'numeric'})}
           </strong>
           <button
             className="secondary"
@@ -153,50 +154,28 @@ export function Schedule({ user, data, act }) {
           </button>
         )}
       </div>
-      {user.role==='chef' && <div className="toolbar"><button className="secondary" onClick={()=>setTemplatesOpen(!templatesOpen)}>Schichtvorlagen bearbeiten</button><span>{scheduled.length} Einträge · {formatHours(sum(scheduled,scheduleHours))} geplant</span></div>}
+      {user.role==='chef' && <div className="toolbar"><button className="secondary" onClick={()=>setTemplatesOpen(!templatesOpen)}>Schichtvorlagen bearbeiten</button></div>}
       {templatesOpen && <ShiftTemplateEditor data={data} act={act} onClose={()=>setTemplatesOpen(false)} />}
       {show && <ScheduleEditor key={editing?.id || editing?.date || 'new'} data={data} act={act} editing={editing || {date:days[0]}} onClose={()=>{setShow(false);setEditing(null);}} />}
-      <Panel
-        title="Wochenübersicht"
-        subtitle={
-          user.role === "chef"
-            ? `Geplante Lohnkosten: ${euro(cost)} · Schätzung zum aktuellen Lohn`
-            : user.role === "kitchen" ? "Der gemeinsame Teamplan" : "Deine geplanten Schichten"
-        }
-      >
-        <div className="week-grid">
-          {days.map((d) => (
-            <div
-              className={"week-day " + (d === today() ? "is-today" : "")}
-              key={d}
-            >
-              <header>
-                {new Date(d + "T12:00").toLocaleDateString("de-DE", {
-                  weekday: "short",
-                })}
-                <strong>{d.slice(8)}</strong>
-              </header>
-              {scheduled
-                .filter((s) => s.date === d)
-                .map((s) => (
-                  <div className="schedule-shift" key={s.id}>
-                    <strong>{person(data, s.employeeId)}</strong>
-                    <span>
-                      {absenceNames[s.kind] || `${s.start}–${s.end}${s.end < s.start ? ' (+1 Tag)' : ''}`}
-                      {s.templateName && <small>{s.templateName}</small>}
-                    </span>
-                    <span>{roleName[data.employees.find(e => e.id === s.employeeId)?.role]}</span>
-                    {user.role === "chef" && <button className="text-button" onClick={() => {setEditing(s);setShow(true);}}>Bearbeiten</button>}
-                  </div>
-                ))}
-              {!scheduled.some((s) => s.date === d) && (
-                <span className="muted">Keine Schicht</span>
-              )}
-              {user.role === "chef" && <button className="text-button" onClick={() => {setEditing({date:d,start:"17:00",end:"22:00"});setShow(true);}}>+ Schicht</button>}
-            </div>
-          ))}
-        </div>
-      </Panel>
+      <p className="schedule-summary">{scheduled.length} Einträge · {formatHours(sum(scheduled,scheduleHours))} geplant{user.role==='chef' && ` · ${euro(cost)} geschätzte Lohnkosten`}</p>
+      {(role==='all' ? (user.role==='driver'?['driver']:['kitchen','driver',...(scheduled.some(s=>data.employees.find(e=>e.id===s.employeeId)?.role==='chef')?['chef']:[])]) : [role]).map(group=>{
+        const entries=scheduled.filter(s=>data.employees.find(e=>e.id===s.employeeId)?.role===group);
+        return <Panel key={group} className={'schedule-department department-'+group} title={roleName[group]} subtitle={`${entries.length} Einträge · ${formatHours(sum(entries,scheduleHours))} geplant`}>
+          <div className="week-grid">
+            {days.map(d=><section className={'week-day '+(d===today()?'is-today':'')} key={d} aria-label={`${roleName[group]} ${d}`}>
+              <header><span>{new Date(d+'T12:00').toLocaleDateString('de-DE',{weekday:'long'})}</span><strong>{new Date(d+'T12:00').toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})}{d===today()?' · Heute':''}</strong></header>
+              {entries.filter(s=>s.date===d).map(s=><div className="schedule-shift" key={s.id}>
+                <strong>{person(data,s.employeeId)}</strong>
+                <span className="schedule-time">{absenceNames[s.kind] || `${s.start}–${s.end}${s.end<s.start?' (+1 Tag)':''}`}</span>
+                {s.templateName && <small>{s.templateName}</small>}
+                {user.role==='chef' && <button className="text-button" onClick={()=>{setEditing(s);setShow(true);}}>Bearbeiten</button>}
+              </div>)}
+              {!entries.some(s=>s.date===d) && <p className="muted">Keine Schicht</p>}
+              {user.role==='chef' && <button className="text-button" aria-label={`${roleName[group]}: Schicht am ${d} hinzufügen`} onClick={()=>{setEditing({date:d,start:'17:00',end:'22:00',employeeId:data.employees.find(e=>e.active && e.role===group)?.id});setShow(true);}}>+ Schicht</button>}
+            </section>)}
+          </div>
+        </Panel>;
+      })}
     </>
   );
 }
@@ -225,21 +204,23 @@ function OrderTable({ orders, data }) {
     />
   );
 }
-export function Management({ user, data, page, act, notify }) {
+export function Management({ user, data, page, act, notify, onAccess }) {
   const [editing, setEditing] = useState(null),
     [show, setShow] = useState(false),
     [teamRole, setTeamRole] = useState("all"),
     [teamSearch,setTeamSearch]=useState(''),
     [timeView, setTimeView] = useState("day"),
-    [date, setDate] = useState(today());
+    [date, setDate] = useState(today()),
+    [accessTarget,setAccessTarget]=useState(null),[accessBusy,setAccessBusy]=useState(false);
   useEffect(() => {
     setEditing(null);
     setShow(false);
+    setAccessTarget(null);
   }, [page]);
   const titles = {
-    Geld: ["Monatsabrechnung"], Team: ["Team"], Gebiete: ["Liefergebiete"],
+    Geld: ["Lohnabrechnung"], Team: ["Team verwalten"], Gebiete: ["Liefergebiete"],
     Kasse: ["Bargeld"], Zeiten: ["Arbeitszeiten"], Einstellungen: ["Einstellungen"],
-    Finanzen: ["Finanzen"], Daten: ["Daten"],
+    Finanzen: ["Kosten & Ausgaben"], Daten: ["Daten & Export"],
   };
   let body;
   const openNew = () => {
@@ -311,7 +292,13 @@ export function Management({ user, data, page, act, notify }) {
             />
           </Panel>
         )}
-        <Panel title="Teamübersicht">
+        {accessTarget && <Panel title={`Chef-Zugang: ${accessTarget.name}`} subtitle="Mit deiner Chef-PIN bestätigen. Der Zugriff wird protokolliert.">
+          <form className="account-form" onSubmit={async event=>{event.preventDefault();const pin=new FormData(event.currentTarget).get('pin');setAccessBusy(true);try{await api('login',{id:accessTarget.id,chefId:user.id,pin});await onAccess();}catch(error){notify(error.message);}finally{setAccessBusy(false);}}}>
+            <label>Chef-PIN<input name="pin" type="password" inputMode="numeric" pattern="[0-9]{4,12}" minLength={4} maxLength={12} autoComplete="current-password" required autoFocus /></label>
+            <div className="row"><button className="primary" disabled={accessBusy}>Konto öffnen</button><button type="button" className="secondary" disabled={accessBusy} onClick={()=>setAccessTarget(null)}>Abbrechen</button></div>
+          </form>
+        </Panel>}
+        <Panel title="Teamübersicht" subtitle="Bearbeiten: persönliche Daten, Rolle und PIN zurücksetzen. Eigene PIN ändern: Mein Zugang.">
           <Table
             headers={["Name", "Rolle", "Telefon", "Stundenlohn", "Status", "Aktion"]}
             rows={data.employees.filter(e => (teamRole === "archived" ? e.archived : !e.archived && (teamRole === "all" || e.role === teamRole)) && (e.name+' '+(e.phone || '')).toLocaleLowerCase('de-DE').includes(teamSearch.toLocaleLowerCase('de-DE'))).map((e) => [
@@ -323,6 +310,7 @@ export function Management({ user, data, page, act, notify }) {
                 {e.archived ? 'Entfernt' : e.active !== false ? "Aktiv" : "Pausiert"}
               </Badge>,
               <div className="row">
+                {e.active && e.id!==user.id && <button className="text-button" onClick={()=>{setAccessTarget(e);setShow(false);window.scrollTo({top:0,behavior:'smooth'});}}>Konto öffnen</button>}
                 <button
                   className="text-button"
                   onClick={() => {
@@ -595,8 +583,8 @@ export function Management({ user, data, page, act, notify }) {
               .reverse()
               .map((a) => [
                 new Date(a.at || a.createdAt).toLocaleString("de-DE"),
-                a.type || a.action,
-                JSON.stringify(a.details || a.changes || {}),
+                ({masterLogin:'Chef-Zugang geöffnet',changeOwnPin:'Eigene PIN geändert'})[a.type] || a.type || a.action,
+                a.type==='masterLogin' ? `${person(data,a.employeeId)} → ${person(data,a.targetId)}` : a.type==='changeOwnPin' ? person(data,a.employeeId) : a.performedBy ? `Chef ${person(data,a.performedBy)} im Konto ${person(data,a.employeeId)}` : JSON.stringify(a.details || a.changes || {}),
               ])}
           />
         </Panel>
@@ -679,7 +667,7 @@ function localTime(d) {
     .toISOString()
     .slice(0, 16);
 }
-export function Driver({ user, data, page, act, notify }) {
+export function Driver({ user, data, page, act, notify, go }) {
   const [form, setForm] = useState(false),
     [receipt, setReceipt] = useState({}),
     [scan, setScan] = useState(null),
@@ -765,6 +753,7 @@ export function Driver({ user, data, page, act, notify }) {
           }
         />
       )}{" "}
+      {page==='Schicht' && go && <HomeShortcuts user={user} data={data} go={go} />}
       {user.role === "kitchen" && page === "Verdienst" && <Title title="Mein Verdienst" subtitle="Deine Arbeitszeit und dein Verdienst nach Monat." />}
       {page === "Schicht" && (
         <>

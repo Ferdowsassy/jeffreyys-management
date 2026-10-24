@@ -5,10 +5,13 @@ import {OrderDetails,NavigationLinks,DeliveryBoard} from './order-details';
 import {orderReference} from './customer-info';
 
 export function OrderQueue({user, data, act}) {
-  const [busy, setBusy] = useState(false), [editing, setEditing] = useState(null), [drivers, setDrivers] = useState({});
+  const [query,setQuery]=useState(""), [payment,setPayment]=useState("all"), [busy, setBusy] = useState(false), [editing, setEditing] = useState(null), [drivers, setDrivers] = useState({});
   const chef = user.role === 'chef';
   const canClaim = chef || user.role==='driver';
-  const orders = (data.availableOrders || []).slice().sort((a,b) => a.createdAt.localeCompare(b.createdAt));
+  const allOrders=(data.availableOrders || []), search=query.trim().toLocaleLowerCase('de-DE');
+  const orders=allOrders.filter(order=>(payment==='all' || (payment==='unknown'?!['cash','online'].includes(order.payment):order.payment===payment)) &&
+    [order.orderNumber,order.address,order.postalCode,order.city,order.customerName].filter(Boolean).join(' ').toLocaleLowerCase('de-DE').includes(search))
+    .sort((a,b)=>a.createdAt.localeCompare(b.createdAt));
   const active = data.shifts.some(s => s.employeeId === user.id && !s.end);
   const onDuty = data.employees.filter(e => e.role === 'driver' && e.active && data.shifts.some(s => s.employeeId === e.id && !s.end));
   const assigned=data.orders.filter(o=>o.status==='open').sort((a,b)=>a.createdAt.localeCompare(b.createdAt));
@@ -18,8 +21,14 @@ export function OrderQueue({user, data, act}) {
     catch {} finally {setBusy(false);}
   }
   return <>
-    <Title title="Verfügbare Bestellungen" />
-    {user.role==='driver' && !active && <div className="notice">Bitte zuerst unter Schicht einstempeln, um Bestellungen zu übernehmen.</div>}
+    <Title title="Verfügbare Bestellungen" subtitle="Bestellung finden, Angaben prüfen und eine Lieferung übernehmen." />
+    <div className="toolbar order-filters">
+      <label>Bestellungen suchen<input type="search" value={query} onChange={event=>setQuery(event.target.value)} placeholder="Bestellnummer, Adresse oder Name" /></label>
+      <label>Zahlung filtern<select value={payment} onChange={event=>setPayment(event.target.value)}><option value="all">Alle Zahlungsarten</option><option value="cash">Bar kassieren</option><option value="online">Bereits bezahlt</option><option value="unknown">Zahlung prüfen</option></select></label>
+      {(query || payment!=='all') && <button className="secondary" onClick={()=>{setQuery('');setPayment('all');}}>Filter zurücksetzen</button>}
+      <span role="status">{orders.length} von {allOrders.length} verfügbaren Bestellungen</span>
+    </div>
+    {user.role==='driver' && !active && <div className="notice">Bitte zuerst unter Meine Schicht einstempeln, um Bestellungen zu übernehmen.</div>}
     <div className="delivery-grid">
       {orders.map(order => <Panel key={order.id} className="order-queue-card delivery-card" title={order.address || 'Adresse fehlt'}
         subtitle={[order.postalCode,order.city].filter(Boolean).join(' ')}
@@ -49,7 +58,7 @@ export function OrderQueue({user, data, act}) {
         </>}
       </Panel>)}
     </div>
-    {!orders.length && <Empty>Keine verfügbaren Bestellungen.</Empty>}
+    {!orders.length && <Empty>{allOrders.length?'Keine Treffer. Suche oder Zahlungsfilter ändern.':'Keine verfügbaren Bestellungen. Neue Lieferungen erscheinen hier automatisch.'}</Empty>}
     {chef && <DeliveryBoard data={data} user={user} act={act} />}
     {chef && assigned.length>0 && <details className="order-reassignment"><summary>Fahrer ändern · {assigned.length} offene Lieferungen</summary><Panel title="Offene Lieferungen zuordnen">
       <div className="table-wrap"><table><thead><tr><th>Bestellung</th><th>Adresse</th><th>Aktueller Fahrer</th><th>Neu zuordnen</th></tr></thead><tbody>{assigned.map(o=><tr key={o.id}><td>{o.orderNumber}</td><td>{o.address}{o.source==='winorder' && <details><summary>Bestelldetails</summary><OrderDetails order={o} /><div className="row"><NavigationLinks order={o} /></div></details>}</td><td>{data.employees.find(e=>e.id===o.employeeId)?.name || '—'}</td><td><form className="order-claim" onSubmit={async e=>{e.preventDefault();setBusy(true);try{await act('assignOrder',{id:o.id,employeeId:drivers[o.id] || o.employeeId});}catch{}finally{setBusy(false);}}}><select aria-label={'Neuer Fahrer für '+o.orderNumber} value={drivers[o.id] || o.employeeId} onChange={e=>setDrivers({...drivers,[o.id]:e.target.value})}>{!onDuty.some(e=>e.id===o.employeeId) && <option value={o.employeeId}>Bitte wählen</option>}{onDuty.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select><button className="secondary" disabled={busy || !onDuty.length || !drivers[o.id] || drivers[o.id]===o.employeeId}>Zuordnen</button></form></td></tr>)}</tbody></table></div>{!assigned.length && <Empty>Keine offenen Lieferungen.</Empty>}

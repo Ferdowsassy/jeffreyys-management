@@ -21,7 +21,7 @@ const context=await browser.newContext({timezoneId:'Europe/Berlin',viewport:{wid
 await context.route('https://tile.openstreetmap.org/**',r=>r.fulfill({status:204}));
 const page=await context.newPage(), errors=[];
 page.on('pageerror',e=>errors.push(e.message));
-async function nav(name) {if(await page.getByRole('button',{name:'Menü',exact:true}).isVisible())await page.getByRole('button',{name:'Menü',exact:true}).click();await page.locator('.sidebar').getByRole('button',{name,exact:true}).click();}
+async function nav(name) {name=({Plan:'Stundenplan',Zeiten:'Arbeitszeiten',Analyse:'Betriebsanalyse',Geld:'Lohnabrechnung',Belege:'Meine Belege',Tour:'Meine Tour'})[name] || name;if(await page.getByRole('button',{name:'Menü',exact:true}).isVisible())await page.getByRole('button',{name:'Menü',exact:true}).click();await page.locator('.sidebar').getByRole('button',{name,exact:true}).click();}
 async function login(name,pin) {
   await page.goto(base);await page.getByRole('button',{name:new RegExp(name)}).click();await page.getByLabel('PIN',{exact:true}).fill(pin);await page.getByRole('button',{name:'Anmelden',exact:true}).click();await page.locator('.sidebar').waitFor();
 }
