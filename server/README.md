@@ -31,6 +31,9 @@ All JSON errors: `{ "error": "Human-readable explanation" }`. Validation 400, un
 - `GET /api/session` → `{user:null}` or `{user:Employee}`. Kitchen sessions exclude financial fields.
 - `GET /api/people` → `{demo:boolean,people:[{id,name,role}]}` for active employees; public.
 - `POST /api/login` `{id,pin}` → `{user}` and session cookie. PIN is a string of 4–12 digits.
+- For master access, send `{id,chefId,pin}` with an active chef's ID and PIN. The session uses the selected employee's permissions, records the chef in the audit trail, and returns `access.chefName`. The existing chef PIN is the master PIN; there is no shared default or additional secret to configure. Chef deactivation, role changes or a changed chef PIN invalidate this access.
+- `POST /api/account/return` `{}` returns a master session to its authorizing chef account.
+- `POST /api/account/pin` `{currentPin,newPin,confirmPin}` changes only the signed-in employee's PIN after checking their current PIN. New PINs must match and contain 4–12 digits. It rotates the session and revokes other sessions, including master sessions authorized by a chef changing their PIN. PIN changes are rate-limited and audited; master sessions use Team to reset employee PINs instead.
 - `POST /api/logout` `{}` → `{ok:true}`; revokes session and closes its SSE streams.
 - `GET /api/state` → state described below.
 - `GET /api/events` → authenticated SSE; `ready` and `invalidate` named events, both with `{}` data. Subscribe with `eventSource.addEventListener('invalidate', refetch)`. Heartbeats every 15 seconds; no private records are streamed. Sessions are rechecked on heartbeat/invalidation.

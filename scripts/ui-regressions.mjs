@@ -27,7 +27,7 @@ async function login(name,pin){
 try {
  if (scenario==='reset'||scenario==='all') {
   await login('Alex','1234');
-  await page.getByRole('button',{name:'Daten',exact:true}).click();
+  await page.getByRole('button',{name:'Daten & Export',exact:true}).click();
   page.once('dialog',d=>d.accept('RESET'));
   await page.getByRole('button',{name:'Alles zurücksetzen',exact:true}).click();
   await expect(page.getByRole('button',{name:/Alex/})).toBeVisible({timeout:3000});

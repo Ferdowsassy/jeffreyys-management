@@ -18,7 +18,7 @@ const base='http://127.0.0.1:'+server.address().port;
 let browser;
 try {
   browser=await chromium.launch({headless:true});
-  for(const [name,pin,view,amount] of [['Alex','1234','Geld','40,00'],['Samira','2345','Mein Verdienst','40,00'],['Leo','3456','Verdienst','42,50']]) {
+  for(const [name,pin,view,amount] of [['Alex','1234','Lohnabrechnung','40,00'],['Samira','2345','Mein Verdienst','40,00'],['Leo','3456','Verdienst','42,50']]) {
     const context=await browser.newContext({viewport:{width:1440,height:1000},timezoneId:'Europe/Berlin'});
     const page=await context.newPage(), errors=[];page.on('pageerror',e=>errors.push(e.message));
     await page.goto(base);await page.getByRole('button',{name:new RegExp(name)}).click();
