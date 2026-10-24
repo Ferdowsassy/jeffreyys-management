@@ -84,6 +84,9 @@ const owned = (record, user) => {
     fail("Not your record", 403);
   return record;
 };
+const requireTipPermission = (user, payload) => {
+  if (Object.hasOwn(payload, "tipOnline") || Object.hasOwn(payload, "tipCash")) requireRole(user, "chef");
+};
 const requireOrderAccounting = order => {
   if (order.source==='winorder' && (typeof order.amount!=='number' || !Number.isFinite(order.amount) || !['cash','online'].includes(order.payment)))
     fail('Bitte bei der Bestellung Betrag und Zahlungsart ergänzen. Die Angaben kannst du unter Tour selbst speichern.',409);
@@ -318,6 +321,7 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
     }
     case "reviewImportedOrder": {
       requireRole(user, 'chef', 'driver');
+      requireTipPermission(user, p);
       result = lookup(s.orders, p.id);
       if (result.source !== 'winorder' || !['review','available','open'].includes(result.status)) fail('Diese Bestellung kann nicht mehr bearbeitet werden.', 409);
       if (user.role==='driver' && (result.status!=='open' || result.employeeId!==user.id)) fail('Nur selbst übernommene Bestellungen können ergänzt werden.',403);
@@ -332,6 +336,7 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
     }
     case "addOrder": {
       requireRole(user, "driver", "chef");
+      requireTipPermission(user, p);
       const employeeId =
         user.role === "chef" ? p.employeeId || user.id : user.id;
       const driver = lookup(s.employees, employeeId);
@@ -381,7 +386,7 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
       break;
     }
     case "saveOrderTips": {
-      requireRole(user, "driver", "chef");
+      requireRole(user, "chef");
       result = owned(lookup(s.orders, p.id), user);
       if (!['open', 'delivered'].includes(result.status) || !s.employees.some(e => e.id === result.employeeId && e.role === 'driver'))
         fail("Trinkgeld ist nur für zugeordnete Fahrerbestellungen möglich.", 409);

@@ -37,14 +37,15 @@ test('WinOrder imports included tips separately and duplicate receipts never add
   }
   for(const bad of ['-1','not money','25']) assert.ok(parseWinorder(sample('Online bezahlt',bad))[0].reviewIssues.includes('Trinkgeld prüfen'));
 });
-test('only owner or chef can edit driver-order tips and invalid amounts do not alter records',()=>{
+test('only chef can edit driver-order tips and invalid amounts do not alter records',()=>{
   const s=seed(), driver=s.employees.find(e=>e.id==='leo'),chef=s.employees.find(e=>e.id==='alex'),mia=s.employees.find(e=>e.id==='mia');
   const order=s.orders.find(o=>o.employeeId===driver.id);
-  action(s,driver,{type:'saveOrderTips',id:order.id,tipOnline:3.25,tipCash:2});
-  action(s,driver,{type:'saveOrderTips',id:order.id,tipOnline:3.25,tipCash:2});
+  action(s,chef,{type:'saveOrderTips',id:order.id,tipOnline:3.25,tipCash:2});
+  action(s,chef,{type:'saveOrderTips',id:order.id,tipOnline:3.25,tipCash:2});
   assert.equal(order.tipOnline,3.25);
   assert.throws(()=>action(s,mia,{type:'saveOrderTips',id:order.id,tipOnline:99,tipCash:0}),e=>e.status===403);
-  for(const value of [-1,NaN,Infinity,'2',100001])assert.throws(()=>action(s,driver,{type:'saveOrderTips',id:order.id,tipOnline:value,tipCash:0}));
+  for(const employee of [driver,s.employees.find(e=>e.role==='kitchen')])assert.throws(()=>action(s,employee,{type:'saveOrderTips',id:order.id,tipOnline:99,tipCash:0}),e=>e.status===403);
+  for(const value of [-1,NaN,Infinity,'2',100001])assert.throws(()=>action(s,chef,{type:'saveOrderTips',id:order.id,tipOnline:value,tipCash:0}));
   assert.equal(order.tipOnline,3.25);
   action(s,chef,{type:'saveOrderTips',id:order.id,tipOnline:4,tipCash:0});
   assert.equal(order.tipOnline,4);
@@ -112,4 +113,24 @@ test('unchanged pre-tip imports remain duplicates without rewriting historical a
     if(status==='available')assert.equal(importWinorder(s,changed).updated,1);
     else assert.throws(()=>importWinorder(s,changed),error=>error.status===409);
   }
+});
+
+
+test('driver cannot inject tips through receipt creation or imported-order correction',async t=>{
+  const {request,login,app}=await fixture(t);
+  const driver=await login('leo','3456'),chef=await login('alex','1234'),kitchen=await login('samira','2345');
+  const receipt={type:'addOrder',noAddress:true,orderNumber:'TIP-PERMISSIONS',amount:20,payment:'online'};
+  for(const cookie of [driver,kitchen])for(const field of ['tipOnline','tipCash'])
+    assert.equal((await request('/api/action',{...receipt,[field]:3},cookie)).status,403);
+  assert.equal((await request('/api/action',receipt,driver)).status,200);
+  await app.locals.store.transact(state=>importWinorder(state,parseWinorder(sample())));
+  const imported=app.locals.store.read().orders.find(order=>order.source==='winorder');
+  assert.equal((await request('/api/action',{type:'claimOrder',id:imported.id},driver)).status,200);
+  const correction={type:'reviewImportedOrder',id:imported.id,address:'Teststraße 2',postalCode:'80802',city:'München',amount:20,payment:'online'};
+  for(const field of ['tipOnline','tipCash'])assert.equal((await request('/api/action',{...correction,[field]:10},driver)).status,403);
+  assert.equal((await request('/api/action',correction,driver)).status,200);
+  const preserved=app.locals.store.read().orders.find(order=>order.id===imported.id);
+  assert.equal(preserved.tipOnline,3.25);assert.equal(preserved.tipCash,0);
+  assert.equal((await request('/api/action',{...correction,tipOnline:5,tipCash:1},chef)).status,200);
+  assert.equal((await request('/api/state',undefined,driver)).body.orders.find(order=>order.id===imported.id).tipOnline,5);
 });
