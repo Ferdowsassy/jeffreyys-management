@@ -12,6 +12,7 @@ import {createWinorderDiagnostics} from './winorder-diagnostics.js';
 import { filterState, action, fail, payroll } from "./domain.js";
 import {mountPasskeys,mountNotifications} from './workspace-access.js';
 import {payrollPdf} from './payroll-pdf.js';
+import {schedulePdf} from './schedule-pdf.js';
 
 const sessionUser = (employee) =>
   employee.role === "kitchen"
@@ -266,6 +267,12 @@ export async function createApp({
       signIn(req,res,store.read().employees.find(e=>e.id===req.user.id));
     }catch(error){next(error);}
   });
+  app.get('/api/schedule.pdf',async(req,res,next)=>{try{
+    if(req.user.role!=='chef')fail('Chef-Zugang erforderlich.',403);
+    const weekStart=req.query.weekStart,role=req.query.role ?? 'all';
+    const pdf=await schedulePdf(store.read(),weekStart,role);
+    res.type('application/pdf').attachment('stundenplan-'+weekStart+'.pdf').send(pdf);
+  }catch(error){next(error);}});
   app.get('/api/payroll.pdf',async(req,res,next)=>{try{
     const month=req.query.month;
     if(typeof month!=='string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month))fail('Bitte einen gültigen Monat wählen.');
