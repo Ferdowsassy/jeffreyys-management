@@ -155,7 +155,7 @@ export function Schedule({ user, data, act }) {
           </button>
         )}
       </div>
-      {user.role==='chef' && <div className="toolbar"><button className="secondary" onClick={()=>setTemplatesOpen(!templatesOpen)}>Schichtvorlagen bearbeiten</button></div>}
+      {user.role==='chef' && <div className="toolbar"><a className="secondary" href={'/api/schedule.pdf?weekStart='+days[0]+'&role='+role} download><Download size={17} />Woche als PDF</a><button className="secondary" onClick={()=>setTemplatesOpen(!templatesOpen)}>Schichtvorlagen bearbeiten</button></div>}
       {templatesOpen && <ShiftTemplateEditor data={data} act={act} onClose={()=>setTemplatesOpen(false)} />}
       {show && <ScheduleEditor key={editing?.id || `${editing?.date || days[0]}:${editing?.employeeId || 'new'}`} data={data} act={act} editing={editing || {date:days[0]}} onClose={()=>{setShow(false);setEditing(null);}} />}
       <p className="schedule-summary">{scheduled.length} Einträge · {formatHours(sum(scheduled,scheduleHours))} geplant{user.role==='chef' && ` · ${euro(cost)} geschätzte Lohnkosten`}</p>

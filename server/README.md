@@ -170,4 +170,3 @@ Payroll keeps `gross = hourlyPay + deliveryPay` for wage-cost reporting and adds
 
 `driverFuel` is a separate collection (`jm_driverFuel` in MySQL, created automatically). `saveDriverFuel {id?,date,amount,liters?,note?}` and `deleteDriverFuel {id}` are restricted to the owning driver. Dates cannot be in the future; amount must be positive; liters are optional. Only that driver's account receives its entries; chef/kitchen/other-driver state and chef exports omit them, and no fuel details are written to the shared audit log. As with the rest of an employee account, an authorized chef master login can access the account. Fuel records are informational only: no expenses, wages, tips, cash, salary payments, payroll, or business statistics are changed.
 
-
