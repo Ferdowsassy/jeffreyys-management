@@ -1,6 +1,6 @@
 import React, {useEffect, useState} from 'react';
 import {Panel, Title} from './main';
-import {dailyStats, berlinDate} from '../shared/daily-stats';
+import {dailyStats, berlinDate, revenueDate} from '../shared/daily-stats';
 import {payroll} from '../shared/payroll';
 import {euro, formatHours} from './finance';
 import EarningsWeek from './earnings-week';
@@ -25,7 +25,7 @@ function Bars({title, values}) {
   </Panel>;
 }
 export default function DailyStatistics({user,data}) {
-  const [date,setDate]=useState(()=>berlinDate(Date.now())),[now,setNow]=useState(Date.now());
+  const [date,setDate]=useState(()=>(user.role==='chef'?revenueDate:berlinDate)(Date.now())),[now,setNow]=useState(Date.now());
   const [mode,setMode]=useState('day'),[value,setValue]=useState(()=>berlinDate(Date.now()));
   useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),30000);return()=>clearInterval(timer);},[]);
   const stats=dailyStats(data,user,date,now);
@@ -36,7 +36,7 @@ export default function DailyStatistics({user,data}) {
     [business ? 'Arbeitsstunden · Team' : 'Deine Arbeitsstunden',formatHours(stats.hours)],
     [business ? 'Teamverdienst vor Bargeldabzug' : 'Dein Verdienst vor Bargeldabzug',euro(stats.totalEarnings)],
     ['Ø bestätigte Lieferzeit',stats.averageMinutes===null ? '—' : Math.round(stats.averageMinutes)+' Min.']];
-  if(business)metrics.push(['Umsatz erfasster Bestellungen',euro(stats.revenue)],['Barumsatz',euro(data.orders.filter(o=>berlinDate(o.createdAt)===date && o.payment==='cash').reduce((n,o)=>n+o.amount,0))]);
+  if(business)metrics.push(['Umsatz erfasster Bestellungen',euro(stats.revenue)],['Barumsatz',euro(stats.cashRevenue)]);
   if(driver)metrics.push(['Barzahlungen zugestellter Schichtbestellungen',euro(stats.collectedCash)],
     ['Bargeld bei dir · alle erfassten Tage',euro(own.retainedCash)],['Deine Auszahlung · alle erfassten Tage',euro(own.payout)]);
   return <>
@@ -44,9 +44,9 @@ export default function DailyStatistics({user,data}) {
     {business && <EmployeeCosts data={data} user={user} />}
     {!business && <><PeriodPicker {...{mode,setMode,value,setValue}} />{mode!=='day' && <PeriodSummary data={data} user={user} mode={mode} value={value} />}</>}
     <EarningsWeek user={user} data={data} date={date} onDateChange={setDate} />
-    <div className="toolbar"><label>Statistiktag <input type="date" value={date} max={berlinDate(now)} onChange={e=>{if(e.target.value)setDate(e.target.value);}} /></label><span>Zeitzone: Berlin</span></div>
+    <div className="toolbar"><label>Statistiktag <input type="date" value={date} max={berlinDate(now)} onChange={e=>{if(e.target.value)setDate(e.target.value);}} /></label><span>{business?'Umsatztag: 02:00 bis 02:00 · Berlin':'Zeitzone: Berlin'}</span></div>
     <div className="daily-stat-grid">{metrics.map(([label,value])=><div className="daily-stat" key={label}><small>{label}</small><strong>{value}</strong></div>)}</div>
-    <details className="earnings-help"><summary>Details zu den Tageszahlen</summary><p className="muted">Arbeitszeit, Lohn und Liefergeld zählen vollständig zum Berliner Tag des Schichtbeginns, auch nach Mitternacht. Laufende Schichten sind vorläufig. Bestell- und Zustellzahlen verwenden weiterhin den tatsächlichen Kalendertag. Automatische Abschlüsse zählen als zugestellt, werden aus der durchschnittlichen Lieferzeit ausgenommen.</p></details>
+    <details className="earnings-help"><summary>Details zu den Tageszahlen</summary><p className="muted">Arbeitszeit, Lohn und Liefergeld zählen vollständig zum Berliner Tag des Schichtbeginns, auch nach Mitternacht. Laufende Schichten sind vorläufig. {business?'Bestell-, Zustell- und Umsatzwerte vor 02:00 zählen zum Vortag (Berlin).':'Bestell- und Zustellzahlen verwenden den tatsächlichen Kalendertag.'} Automatische Abschlüsse zählen als zugestellt, werden aus der durchschnittlichen Lieferzeit ausgenommen.</p></details>
     <Bars title="Erfasste Bestellungen nach Uhrzeit" values={stats.hourly} />
     <Bars title="Erfasste Bestellungen · letzte 7 Tage bis zum gewählten Tag" values={stats.weekly} />
   </>;
