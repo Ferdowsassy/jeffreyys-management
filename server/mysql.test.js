@@ -29,7 +29,10 @@ test('real MySQL preserves migration, rolls back, survives restart and serialize
   const a = await open({initialState:original});
   assert.deepEqual(a.read(), original);
   await assert.rejects(open({initialState:original}), /already contains/);
+  // A private fuel record shares the transactional MySQL persistence and survives reopening.
+  await a.transact(s => s.driverFuel.push({id:'private-fuel',employeeId:'leo',date:'2026-10-01',amount:42.5,liters:25,note:'Private',createdAt:'2026-10-01T12:00:00Z'}));
   const b = await open();
+  assert.equal(b.read().driverFuel[0].amount,42.5);
   await Promise.all(Array.from({length:20}, (_, i) => (i%2 ? a : b).transact(s => {
     s.tasks.push({id:'concurrent-'+i, text:'Task '+i, done:false, demo:false});
   })));

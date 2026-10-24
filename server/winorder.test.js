@@ -245,7 +245,7 @@ test('all business order details persist, are shared with the team, and price-on
   sample.OrderList.Order.ArticleList.Article[0].Price='13.00';
   assert.equal((await send()).body.data.updated,1);
   const order=app.locals.store.read().orders.find(o=>o.source==='winorder');
-  assert.equal(order.amount,32.5); assert.deepEqual(order.items,[]); // Do not invent reconciled article revenue.
+  assert.equal(order.amount,30.5); assert.equal(order.tipCash,2); assert.deepEqual(order.items,[]); // Do not invent reconciled article revenue.
   assert.equal((await request('/api/action',{type:'claimOrder',id:order.id},driver)).status,200);
   const chef=await login('alex','1234');
   const shared=(await request('/api/state',undefined,chef)).body.deliveryBoard.find(o=>o.id===order.id);

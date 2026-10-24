@@ -1,7 +1,7 @@
 import mysql from 'mysql2/promise';
 import { bootstrapState, seed } from './store.js';
 
-export const collections = ['employees', 'orders', 'shifts', 'schedule', 'zones', 'tasks', 'handoffs', 'audit', 'shiftRequests', 'expenses', 'salaryPayments'];
+export const collections = ['employees', 'orders', 'shifts', 'schedule', 'zones', 'tasks', 'handoffs', 'audit', 'shiftRequests', 'expenses', 'salaryPayments', 'driverFuel'];
 const table = key => `jm_${key}`;
 const decode = value => typeof value === 'string' ? JSON.parse(value) : value;
 
@@ -97,6 +97,7 @@ export async function createMysqlStore(config, {demo = false, bootstrap, initial
       next.shiftRequests ??= [];
       next.expenses ??= [];
       next.salaryPayments ??= [];
+      next.driverFuel ??= [];
       await persist(connection, next);
       return {state: next, revision: Number(meta.revision) + 1};
     });

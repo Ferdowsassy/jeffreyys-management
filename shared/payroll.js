@@ -23,6 +23,8 @@ export function payroll(state, now = Date.now()) {
       (sum, o) => sum + cents(o.deliveryFee),
       0,
     );
+    const onlineTips = orders.reduce((sum, o) => sum + cents(o.tipOnline || 0), 0);
+    const cashTips = orders.reduce((sum, o) => sum + cents(o.tipCash || 0), 0);
     const collected = orders
       .filter((o) => o.payment === "cash")
       .reduce((sum, o) => sum + cents(o.amount), 0);
@@ -52,10 +54,14 @@ export function payroll(state, now = Date.now()) {
       hourlyPay: euros(hourlyCents),
       deliveryPay: euros(deliveryCents),
       gross: euros(hourlyCents + deliveryCents),
+      onlineTips: euros(onlineTips),
+      cashTips: euros(cashTips),
+      tips: euros(onlineTips + cashTips),
+      totalEarnings: euros(hourlyCents + deliveryCents + onlineTips + cashTips),
       collectedCash: euros(collected),
       returnedCash: euros(returned),
       retainedCash: euros(retained),
-      payout: euros(hourlyCents + deliveryCents - retained),
+      payout: euros(hourlyCents + deliveryCents + onlineTips - retained),
       pendingHandoffs: state.handoffs.filter(
         (h) => h.employeeId === employee.id && !h.chefConfirmed && !h.cashRetained,
       ).length,

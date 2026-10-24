@@ -95,6 +95,8 @@ export function filterState(state, user) {
   // Previously held imports are immediately claimable too; no release step.
   for (const order of s.orders) if (order.source==='winorder' && order.status==='review') order.status='available';
   s.employees = s.employees.map(safeEmployee);
+  // Personal fuel records never enter chef exports, business expenses or payroll.
+  s.driverFuel = user.role === "driver" ? (s.driverFuel || []).filter(entry => entry.employeeId === user.id) : [];
   s.payroll = payroll(state);
   s.availableOrders = s.orders.filter(o => ['available', 'review'].includes(o.status));
   s.deliveryBoard = user.role==='chef' ? s.orders.filter(o=>o.source==='winorder' && (o.status==='open' || (o.status==='delivered' && o.deliveredAt && berlinDate(o.deliveredAt)===today())))
@@ -333,7 +335,9 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
       const postalCode = text(p.postalCode, 'PLZ', 5);
       if (!/^\d{5}$/.test(postalCode)) fail('Bitte eine fünfstellige PLZ angeben.');
       Object.assign(result, {address:text(p.address, 'Adresse'), postalCode, city:text(p.city, 'Ort', 100),
-        amount:money(p.amount, 'Betrag'), payment:p.payment, reviewIssues:[], status:result.employeeId ? 'open' : 'available', reviewedAt:now, reviewedBy:user.id});
+        amount:money(p.amount, 'Betrag'), payment:p.payment,
+        tipOnline:money(p.tipOnline ?? result.tipOnline ?? 0, 'Online-Trinkgeld'),
+        tipCash:money(p.tipCash ?? result.tipCash ?? 0, 'Bar-Trinkgeld'), reviewIssues:[], status:result.employeeId ? 'open' : 'available', reviewedAt:now, reviewedBy:user.id});
       break;
     }
     case "addOrder": {
@@ -377,11 +381,44 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
         deliveryFee: noAddress ? (s.settings.flatFee ?? 0) : zone
           ? rate(zone.feeHistory || [], today(), "fee", zone.fee)
           : 0,
+        tipOnline: driver.role === "driver" ? money(p.tipOnline ?? 0, "Online-Trinkgeld") : 0,
+        tipCash: driver.role === "driver" ? money(p.tipCash ?? 0, "Bar-Trinkgeld") : 0,
         items: orderItems(p.items),
         noAddress,
         demo: false,
       };
       s.orders.push(result);
+      break;
+    }
+    case "saveOrderTips": {
+      requireRole(user, "driver", "chef");
+      result = owned(lookup(s.orders, p.id), user);
+      if (!['open', 'delivered'].includes(result.status) || !s.employees.some(e => e.id === result.employeeId && e.role === 'driver'))
+        fail("Trinkgeld ist nur für zugeordnete Fahrerbestellungen möglich.", 409);
+      const tipOnline = money(p.tipOnline, "Online-Trinkgeld"), tipCash = money(p.tipCash, "Bar-Trinkgeld");
+      Object.assign(result, {tipOnline, tipCash});
+      break;
+    }
+    case "saveDriverFuel": {
+      requireRole(user, "driver");
+      const existing = p.id ? lookup(s.driverFuel || [], p.id) : null;
+      if (existing && existing.employeeId !== user.id) fail("Not your record", 403);
+      const date = day(p.date);
+      if (date > today()) fail("Bitte kein zukünftiges Tankdatum wählen.");
+      const amount = money(p.amount, "Tankbetrag");
+      if (amount <= 0) fail("Bitte einen Tankbetrag größer als 0 eingeben.");
+      result = {id:existing?.id || id, employeeId:user.id, date, amount,
+        liters:p.liters === undefined || p.liters === null ? null : number(p.liters, "Liter", 0.01, 1000),
+        note:p.note ? text(p.note, "Notiz", 200) : "", createdAt:existing?.createdAt || now, updatedAt:now};
+      s.driverFuel ??= [];
+      if (existing) Object.assign(existing, result); else s.driverFuel.push(result);
+      break;
+    }
+    case "deleteDriverFuel": {
+      requireRole(user, "driver");
+      result = lookup(s.driverFuel || [], p.id);
+      if (result.employeeId !== user.id) fail("Not your record", 403);
+      s.driverFuel = s.driverFuel.filter(entry => entry.id !== result.id);
       break;
     }
     case "saveOrderItems": {
@@ -738,7 +775,7 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
     default:
       fail("Unknown action");
   }
-  if (["saveLocation", "stopLocation"].includes(p.type)) return result;
+  if (["saveLocation", "stopLocation", "saveDriverFuel", "deleteDriverFuel"].includes(p.type)) return result;
   s.audit.push({
     id: randomUUID(),
     type: p.type,

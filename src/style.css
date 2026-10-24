@@ -1835,3 +1835,13 @@ button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visibl
   .page-finder { padding: 18px; }
   .finder-heading h2 { font-size: 18px; }
 }
+
+.driver-money-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
+
+.order-tip-editor { padding: 16px 23px; border-top: 1px solid var(--line); font-size: 14px; }
+.order-tip-editor > .row { justify-content: space-between; flex-wrap: wrap; }
+.order-tip-editor .form-grid { padding: 16px 0 0; }
+.order-tip-editor > p { margin-top: 10px; }
+.tip-history-entry { padding: 16px 0 0; border-top: 1px solid var(--line); }
+.tip-history-entry > strong, .tip-history-entry > small { display: block; margin: 0 23px 8px; }
+.tip-history-entry .order-tip-editor { border-top: 0; }

@@ -38,7 +38,7 @@ try {
   await login('Leo','3456');
   await page.locator('input[type=file]').setInputFiles(resolve('scripts/fixtures/demo-receipt.png'));
   await expect(page.getByLabel('Bestellnummer',{exact:true})).toHaveValue('SCAN-123',{timeout:90000});
-  await expect(page.getByLabel('Betrag (€)',{exact:true})).toHaveValue('27.5');
+  await expect(page.getByLabel('Bestellbetrag ohne Trinkgeld (€)',{exact:true})).toHaveValue('27.5');
   console.log('PASS local OCR fills reviewed receipt form');
  }
  if (scenario==='sse'||scenario==='all') {

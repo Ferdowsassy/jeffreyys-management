@@ -27,6 +27,7 @@ import {ScheduleEditor, ShiftTemplateEditor} from './schedule-editor';
 import {absenceNames, scheduleHours} from '../shared/schedule';
 import {MonthlyPayroll, Expenses, Customers, TimeMonthChart, RevenueTrend} from './operations';
 import {ClockOut} from './workspace-access';
+import {OrderTipEditor} from './driver-money';
 import {HomeShortcuts} from './everyday-tools';
 const today = () => day(Date.now());
 const person = (data, id) =>
@@ -695,7 +696,9 @@ export function Driver({ user, data, page, act, notify, go }) {
       pattern: "[0-9]{5}",
     },
     { name: "city", label: "Ort", value: "München", required: false },
-    moneyField("amount", "Betrag (€)"),
+    moneyField("amount", "Bestellbetrag ohne Trinkgeld (€)"),
+    {...moneyField("tipOnline", "Online-Trinkgeld (€)"),value:0,required:false},
+    {...moneyField("tipCash", "Bar-Trinkgeld (€)"),value:0,required:false},
     {
       name: "payment",
       label: "Zahlungsart",
@@ -774,7 +777,7 @@ export function Driver({ user, data, page, act, notify, go }) {
               </div>
               {(user.role === "driver" || user.role === "kitchen") && (
                 <div className="shift-clock">
-                  {euro(dailyEarnings(data, user.id, active ? day(active.start) : today()).gross)}
+                  {euro(dailyEarnings(data, user.id, active ? day(active.start) : today()).totalEarnings)}
                   <span>{active ? 'Schichttag '+day(active.start) : 'Heute verdient'} · vor Bargeldabzug</span>
                   <small>Auszahlung gesamt: {euro(personalPay.payout)} · Bargeld bei dir: {euro(personalPay.retainedCash)}</small>
                 </div>
@@ -846,6 +849,8 @@ export function Driver({ user, data, page, act, notify, go }) {
               await act("addOrder", {
                 ...v,
                 amount: Number(v.amount),
+                tipOnline: Number(v.tipOnline || 0),
+                tipCash: Number(v.tipCash || 0),
                 noAddress: v.noAddress === "true",
               });
               setForm(false);
@@ -883,6 +888,7 @@ export function Driver({ user, data, page, act, notify, go }) {
                     {euro(o.deliveryFee)}
                   </small>
                 </div>
+                <OrderTipEditor order={o} act={act} />
                 {o.source === 'winorder' && <OrderDetails order={o} role="driver" act={act} canCorrect />}
                 <div className="row navigation-actions">
                   <NavigationLinks order={o} />

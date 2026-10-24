@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   CalendarDays,
   Wallet,
+  Fuel,
   ChartNoAxesCombined,
   Users,
   MapPin,
@@ -27,6 +28,7 @@ import {
 import { euro, day, sum, hours } from "./finance";
 import { Management, Driver, Schedule, Analytics } from "./pages";
 import "./style.css";
+import {DriverFuel} from "./driver-money";
 import {ShiftCorrections} from "./shift-corrections";
 import { InstallApp } from "./install-app";
 import { useDriverLocation } from "./location-sharing";
@@ -278,7 +280,7 @@ function Login({ onLogin, notify }) {
   );
 }
 const navLabel={Plan:'Stundenplan',Geld:'Lohnabrechnung',Zeiten:'Arbeitszeiten',Tafel:'Küchenübersicht',Schicht:'Meine Schicht',Finanzen:'Kosten & Ausgaben',Daten:'Daten & Export',Gebiete:'Liefergebiete',Analyse:'Betriebsanalyse',Belege:'Meine Belege',Tour:'Meine Tour'};
-const navGroup=label=>['Heute','Tafel','Schicht','Bestellungen','Tour','Belege','Aufgaben'].includes(label)?'TÄGLICHE ARBEIT':['Plan','Zeiten','Meine Arbeitszeiten','Team','Gebiete'].includes(label)?'TEAM & PLANUNG':['Geld','Verdienst','Mein Verdienst','Finanzen','Analyse','Statistik','Kunden'].includes(label)?'ZAHLEN & ÜBERSICHT':'EINSTELLUNGEN & KONTO';
+const navGroup=label=>['Heute','Tafel','Schicht','Bestellungen','Tour','Belege','Aufgaben'].includes(label)?'TÄGLICHE ARBEIT':['Plan','Zeiten','Meine Arbeitszeiten','Team','Gebiete'].includes(label)?'TEAM & PLANUNG':['Geld','Verdienst','Mein Verdienst','Finanzen','Analyse','Statistik','Kunden','Mein Benzin'].includes(label)?'ZAHLEN & ÜBERSICHT':'EINSTELLUNGEN & KONTO';
 const chefNav = [
   ["Heute", LayoutDashboard], ["Bestellungen", Truck], ["Aufgaben", ClipboardList],
   ["Plan", CalendarDays], ["Zeiten", Clock], ["Team", Users], ["Gebiete", MapPin],
@@ -394,6 +396,7 @@ function App() {
             ["Belege", Receipt],
             ["Plan", CalendarDays],
             ["Verdienst", Wallet],
+            ["Mein Benzin", Fuel],
             ["Meine Arbeitszeiten", Clock],
             ["Statistik", ChartNoAxesCombined],
           ];
@@ -549,6 +552,8 @@ function App() {
               />
               <Tasks data={data} act={act} />
             </>
+          ) : current === "Mein Benzin" && user.role === "driver" ? (
+            <DriverFuel data={data} act={act} />
           ) : current === "Mein Verdienst" ? (
             <Driver user={user} data={data} page="Verdienst" act={act} notify={notify} />
           ) : user.role === "driver" ? (

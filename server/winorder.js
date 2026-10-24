@@ -130,6 +130,11 @@ export function parseWinorder(body, now = new Date().toISOString()) {
     if (!street || !/^\d{5}$/.test(postalCode) || !city) issues.push('Lieferadresse ergänzen');
     if (amount === null) issues.push('Gesamtbetrag prüfen');
     if (paymentType === null) issues.push('Zahlungsart prüfen');
+    const importedTip = info.Tip === undefined || info.Tip === '' ? 0 : currency(info.Tip);
+    if (importedTip === null || (importedTip > 0 && (!paymentType || amount === null || importedTip > amount)))
+      issues.push('Trinkgeld prüfen');
+    // Total is the payable total; separate a valid included tip from restaurant sales.
+    const tip = importedTip !== null && paymentType && amount !== null && importedTip <= amount ? importedTip : 0;
     // Invoice totals are authoritative; item prices/toppings are retained as delivery details,
     // not mixed into the existing article revenue report without price reconciliation.
     const articles = list(order.ArticleList?.Article);
@@ -142,7 +147,8 @@ export function parseWinorder(body, now = new Date().toISOString()) {
     }).join('\n');
     if (description.length > 16000) fail('WinOrder article details too long');
     const record = {externalOrderId, externalKey, createdAt, source:'winorder', address:street, postalCode, city,
-      amount, payment:paymentType, paymentLabel, orderNumber:externalOrderId, reviewIssues:issues,
+      amount:tip ? Math.round((amount-tip)*100)/100 : amount,
+      ...(tip ? {tipOnline:paymentType==='online'?tip:0,tipCash:paymentType==='cash'?tip:0} : {}), payment:paymentType, paymentLabel, orderNumber:externalOrderId, reviewIssues:issues,
       customerName:[scalar(address.FirstName, 100), scalar(address.LastName, 100)].filter(Boolean).join(' '),
       customerPhone:scalar(address.PhoneNo || address.Mobile, 60),
       deliveryNotes:[scalar(address.AddAddress), scalar(address.DescriptionOfWay, 1000), scalar(info.Comment, 1000)].filter(Boolean).join('\n'),

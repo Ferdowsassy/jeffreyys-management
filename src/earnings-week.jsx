@@ -18,8 +18,8 @@ export default function EarningsWeek({user, data, date, onDateChange}) {
     const key=shiftDate(monday,i);
     return {date:key,...dailyEarnings(data,employeeId,key,now)};
   });
-  const maximum=Math.max(1,...days.map(d=>d.gross));
-  const total=days.reduce((n,d)=>n+Math.round(d.gross*100),0)/100;
+  const maximum=Math.max(1,...days.map(d=>d.totalEarnings));
+  const total=days.reduce((n,d)=>n+Math.round(d.totalEarnings*100),0)/100;
   const chosen=days.find(d=>d.date===current);
   return <Panel className="earnings-panel" title="Verdienst · Wochenübersicht" subtitle="Tippe auf einen Tag für die Aufschlüsselung.">
     <div className="earnings-body">
@@ -39,18 +39,18 @@ export default function EarningsWeek({user, data, date, onDateChange}) {
     <div className="earnings-summary"><span>Wochenverdienst</span><strong>{euro(total)}</strong><small>Vor Bargeldabzug</small></div>
     <div className="earnings-chart" role="group" aria-label="Verdienst nach Wochentag">
       {days.map(d=><button key={d.date} className={'earnings-day'+(d.date===current?' selected':'')} aria-pressed={d.date===current}
-        aria-label={`${weekday(d.date)}, ${shortDate(d.date)}: ${euro(d.gross)}${d.provisional?', vorläufig':''}`} disabled={d.date>today} onClick={()=>choose(d.date)}>
-        <span className="earnings-value">{euro(d.gross)}</span>
-        <span className="earnings-bar-space"><span className="earnings-bar" style={{height:Math.max(3,d.gross/maximum*112)+'px'}} /></span>
+        aria-label={`${weekday(d.date)}, ${shortDate(d.date)}: ${euro(d.totalEarnings)}${d.provisional?', vorläufig':''}`} disabled={d.date>today} onClick={()=>choose(d.date)}>
+        <span className="earnings-value">{euro(d.totalEarnings)}</span>
+        <span className="earnings-bar-space"><span className="earnings-bar" style={{height:Math.max(3,d.totalEarnings/maximum*112)+'px'}} /></span>
         <strong>{weekday(d.date)}</strong><small>{shortDate(d.date)}</small>
       </button>)}
     </div>
     <div className="earnings-detail" aria-live="polite">
-      <h3>{weekday(current)}, {shortDate(current)} · {euro(chosen.gross)}{chosen.provisional && <small> · Vorläufig</small>}</h3>
-      <dl><div><dt>Arbeitszeit</dt><dd>{formatHours(chosen.hours)}</dd></div><div><dt>Lohn</dt><dd>{euro(chosen.wages)}</dd></div><div><dt>Liefergeld</dt><dd>{euro(chosen.fees)}</dd></div></dl>
-      {chosen.hours===0 && chosen.fees===0 && <p className="muted">Für diesen Tag ist noch kein Verdienst erfasst.</p>}
+      <h3>{weekday(current)}, {shortDate(current)} · {euro(chosen.totalEarnings)}{chosen.provisional && <small> · Vorläufig</small>}</h3>
+      <dl><div><dt>Arbeitszeit</dt><dd>{formatHours(chosen.hours)}</dd></div><div><dt>Lohn</dt><dd>{euro(chosen.wages)}</dd></div><div><dt>Liefergeld</dt><dd>{euro(chosen.fees)}</dd></div>{(chosen.onlineTips>0 || chosen.cashTips>0) && <><div><dt>Online-Trinkgeld</dt><dd>{euro(chosen.onlineTips)}</dd></div><div><dt>Bar-Trinkgeld (erhalten)</dt><dd>{euro(chosen.cashTips)}</dd></div></>}</dl>
+      {chosen.totalEarnings===0 && <p className="muted">Für diesen Tag ist noch kein Verdienst erfasst.</p>}
     </div>
-    <details className="earnings-help"><summary>Wie wird der Verdienst berechnet?</summary><p>Lohn + Liefergeld zugestellter Bestellungen, vor Bargeldabzug. Die gesamte Schicht zählt zum Tag des Einstempelns in Berlin, auch nach Mitternacht. Zugeordnete Lieferungen zählen zum selben Schichttag. Laufende Schichten sind vorläufig; die Auszahlung findest du in der Monatsabrechnung.</p></details>
+    <details className="earnings-help"><summary>Wie wird der Verdienst berechnet?</summary><p>Lohn + Liefergeld + Trinkgeld zugestellter Bestellungen, vor Bargeldabzug. Online-Trinkgeld erhöht die Auszahlung; Bar-Trinkgeld ist bereits erhalten. Die gesamte Schicht zählt zum Tag des Einstempelns in Berlin, auch nach Mitternacht. Zugeordnete Lieferungen zählen zum selben Schichttag. Laufende Schichten sind vorläufig; die Auszahlung findest du in der Monatsabrechnung.</p></details>
     </div>
   </Panel>;
 }
