@@ -27,6 +27,7 @@ import {ScheduleEditor, ShiftTemplateEditor} from './schedule-editor';
 import {absenceNames, scheduleHours} from '../shared/schedule';
 import {MonthlyPayroll, Expenses, Customers, TimeMonthChart, RevenueTrend} from './operations';
 import {ClockOut} from './workspace-access';
+import {HomeShortcuts} from './everyday-tools';
 const today = () => day(Date.now());
 const person = (data, id) =>
   data.employees.find((e) => e.id === id)?.name || "Unbekannt";
@@ -666,7 +667,7 @@ function localTime(d) {
     .toISOString()
     .slice(0, 16);
 }
-export function Driver({ user, data, page, act, notify }) {
+export function Driver({ user, data, page, act, notify, go }) {
   const [form, setForm] = useState(false),
     [receipt, setReceipt] = useState({}),
     [scan, setScan] = useState(null),
@@ -752,6 +753,7 @@ export function Driver({ user, data, page, act, notify }) {
           }
         />
       )}{" "}
+      {page==='Schicht' && go && <HomeShortcuts user={user} data={data} go={go} />}
       {user.role === "kitchen" && page === "Verdienst" && <Title title="Mein Verdienst" subtitle="Deine Arbeitszeit und dein Verdienst nach Monat." />}
       {page === "Schicht" && (
         <>

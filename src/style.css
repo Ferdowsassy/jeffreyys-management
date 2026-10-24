@@ -1800,3 +1800,38 @@ button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visibl
 .account-shortcut { background: none; border: 0; padding: 0; color: inherit; text-align: left; display: grid; gap: 5px; }
 .account-shortcut small { font-size: 12px; color: var(--muted); }
 .schedule-department .panel-header h2 { font-size: 20px; }
+
+.home-shortcuts { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; margin: 0 0 24px; }
+.home-shortcuts > button { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); text-align: left; min-height: 98px; }
+.home-shortcuts > button:hover { border-color: var(--orange); background: #fffaf6; }
+.home-shortcuts span { display: grid; gap: 7px; }
+.home-shortcuts strong { font-size: 15px; line-height: 1.4; }
+.home-shortcuts small { font-size: 13px; line-height: 1.5; color: var(--muted); }
+.home-shortcuts svg { flex-shrink: 0; }
+.finder-trigger { gap: 8px; white-space: nowrap; }
+.finder-trigger kbd { font: inherit; font-size: 10px; opacity: .65; }
+.page-finder { width: min(620px,calc(100vw - 32px)); box-sizing: border-box; max-height: 85dvh; border: 1px solid var(--line); border-radius: 16px; padding: 24px; color: var(--ink); box-shadow: 0 24px 80px #0003; }
+.page-finder::backdrop { background: #20241d70; }
+.finder-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; }
+.finder-heading h2 { font-size: 20px; margin: 0; }
+.page-finder label { display: grid; gap: 8px; font-size: 14px; }
+.page-finder input { width: 100%; box-sizing: border-box; }
+.finder-results { display: grid; gap: 6px; max-height: 45dvh; overflow-y: auto; margin-top: 16px; }
+.finder-results button { display: flex; gap: 14px; align-items: center; border: 0; background: transparent; border-radius: 8px; padding: 14px 10px; color: var(--ink); text-align: left; }
+.finder-results button:hover, .finder-results button:focus-visible { background: #f6ede4; }
+.finder-results button span { display: grid; gap: 5px; flex: 1; }
+.finder-results strong { font-size: 15px; }
+.finder-results small, .finder-help { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.finder-help { margin: 16px 0 0; }
+.people-search { display: grid; gap: 8px; font-size: 14px; grid-column: 1 / -1; }
+.form-error { grid-column: 1 / -1; color: #a33b26; background: #fff0eb; border-radius: 8px; padding: 14px; margin: 0; font-size: 14px; }
+.order-filters > label:first-child { flex: 1; min-width: min(260px,100%); }
+@media(max-width:1100px) { .home-shortcuts { grid-template-columns: repeat(2,minmax(0,1fr)); } .finder-trigger kbd { display: none; } }
+@media(max-width:600px) {
+  .home-shortcuts { grid-template-columns: minmax(0,1fr); gap: 8px; }
+  .home-shortcuts > button { padding: 14px 16px; min-height: 76px; }
+  .finder-trigger { padding: 10px; }
+  .finder-trigger span { display: none; }
+  .page-finder { padding: 18px; }
+  .finder-heading h2 { font-size: 18px; }
+}

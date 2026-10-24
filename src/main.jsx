@@ -33,6 +33,7 @@ import { useDriverLocation } from "./location-sharing";
 import {OrderQueue} from './order-queue';
 import {AccountSettings,passkeyLogin} from './workspace-access';
 import {periodStats} from '../shared/accounting';
+import {PageFinder,HomeShortcuts} from './everyday-tools';
 const DailyStatistics = lazy(() => import("./daily-statistics"));
 const LiveDriverMap = lazy(() => import("./driver-map"));
 
@@ -81,7 +82,7 @@ export function Panel({ title, subtitle, action, children, className = "" }) {
   );
 }
 export function Form({ fields, onSubmit, submit = "Speichern", initial = {}, children, disabled = false }) {
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(false), [error,setError]=useState("");
   return (
     <form
       className="form-grid"
@@ -89,9 +90,11 @@ export function Form({ fields, onSubmit, submit = "Speichern", initial = {}, chi
         e.preventDefault();
         const f = e.currentTarget;
         const values = Object.fromEntries(new FormData(f));
-        setBusy(true);
+        setBusy(true);setError('');
         try {
           await onSubmit(values);
+        } catch(error) {
+          setError(error.message || 'Speichern fehlgeschlagen. Bitte erneut versuchen.');
         } finally {
           setBusy(false);
         }
@@ -131,6 +134,7 @@ export function Form({ fields, onSubmit, submit = "Speichern", initial = {}, chi
         </label>
       ))}
       {children}
+      {error && <p className="form-error" role="alert">{error}</p>}
       <button className="primary" disabled={busy || disabled}>
         {busy ? "Wird gespeichert …" : submit}
       </button>
@@ -139,6 +143,7 @@ export function Form({ fields, onSubmit, submit = "Speichern", initial = {}, chi
 }
 function Login({ onLogin, notify }) {
   const [people, setPeople] = useState([]),
+    [peopleQuery,setPeopleQuery]=useState(""),
     [demoMode, setDemoMode] = useState(false),
     [selected, setSelected] = useState(null),
     [pin, setPin] = useState(""),
@@ -189,7 +194,9 @@ function Login({ onLogin, notify }) {
         </p>
         {!selected ? (
           <div className="people">
-            {people.map((p) => (
+            <label className="people-search">Name finden<input type="search" value={peopleQuery} onChange={event=>setPeopleQuery(event.target.value)} placeholder="Deinen Namen eingeben …" autoComplete="off" /></label>
+            {!people.some(person=>person.name.toLocaleLowerCase('de-DE').includes(peopleQuery.trim().toLocaleLowerCase('de-DE'))) && <p role="status">Kein Name gefunden. Suche zurücksetzen oder die Leitung fragen.</p>}
+            {people.filter(person=>person.name.toLocaleLowerCase('de-DE').includes(peopleQuery.trim().toLocaleLowerCase('de-DE'))).map((p) => (
               <button key={p.id} onClick={() => setSelected(p)}>
                 <span className="avatar">{p.name.slice(0, 2)}</span>
                 <span>
@@ -417,6 +424,7 @@ function App() {
             <React.Fragment key={label}>
               {(i===0 || navGroup(nav[i-1][0])!==navGroup(label)) && <div className="nav-caption">{navGroup(label)}</div>}
               <button
+                aria-label={navLabel[label] || label}
                 aria-current={current === label ? "page" : undefined}
                 className={current === label ? "nav-item active" : "nav-item"}
                 onClick={() => go(label)}
@@ -474,6 +482,7 @@ function App() {
             <strong>{navLabel[current] || current}</strong>
           </div>
           <div className="row">
+            <PageFinder nav={nav} labels={navLabel} go={go} />
             <span className={"connection " + (connected ? "" : "offline")}>
               <i />
               {connected ? "Live verbunden" : "Verbindung wird aufgebaut"}
@@ -512,12 +521,13 @@ function App() {
           ) : current === "Statistik" ? (
             <Suspense fallback={<p>Statistik wird geladen …</p>}><DailyStatistics user={user} data={data} /></Suspense>
           ) : current === "Heute" ? (
-            <Dashboard data={data} go={go} act={act} />
+            <Dashboard user={user} data={data} go={go} act={act} />
           ) : current === "Tafel" ? (
             <>
               <Title
                 title="Küchenübersicht"
               />
+              <HomeShortcuts user={user} data={data} go={go} />
               <Driver
                 user={user}
                 data={data}
@@ -544,6 +554,7 @@ function App() {
           ) : user.role === "driver" ? (
             <Driver
               user={user}
+              go={go}
               data={data}
               page={current}
               act={act}
@@ -684,7 +695,7 @@ export function Drivers({ data }) {
     </Panel>
   );
 }
-function Dashboard({ data, go, act }) {
+function Dashboard({ user, data, go, act }) {
   const today = day(Date.now()), summary=periodStats(data,{role:'chef'},'day',today),
     orders=summary.orders,revenue=summary.revenue,cash=summary.cash,wages=summary.wages,
     food=summary.estimatedFood,fixed=summary.estimatedFixed,profit=summary.profit,
@@ -710,7 +721,7 @@ function Dashboard({ data, go, act }) {
   return (
     <>
       <Title
-        title="Ein guter Tag für gute Burger."
+        title="Heute im Überblick"
         subtitle={new Date().toLocaleDateString("de-DE", {
           weekday: "long",
           day: "numeric",
@@ -723,6 +734,7 @@ function Dashboard({ data, go, act }) {
           Zur Analyse <ArrowUpRight size={17} />
         </button>
       </Title>
+      <HomeShortcuts user={user} data={data} go={go} />
       <div className="metrics">
         <div className="metric featured">
           <span>
