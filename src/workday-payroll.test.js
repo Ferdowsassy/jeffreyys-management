@@ -27,7 +27,7 @@ test('month-end wages, deliveries and cash settlement all remain in the start mo
   assert.equal(september.gross+october.gross,all.gross);assert.equal(september.payout+october.payout,all.payout);
   const startMonth=periodStats(data,{role:'chef'},'month','2026-09',now), nextMonth=periodStats(data,{role:'chef'},'month','2026-10',now);
   assert.equal(startMonth.wages,45);assert.equal(nextMonth.wages,0);
-  assert.equal(startMonth.revenue,12);assert.equal(nextMonth.revenue,8); // Sales keep their actual calendar dates.
+  assert.equal(startMonth.revenue,20);assert.equal(nextMonth.revenue,0); // Chef revenue before 02:00 stays on the previous business day.
 });
 
 test('a Sunday-night shift stays in its starting week and a December-night shift stays in its starting year',()=>{

@@ -7,6 +7,12 @@ export function shiftDate(date, offset) {
   d.setUTCDate(d.getUTCDate()+offset);
   return d.toISOString().slice(0,10);
 }
+// Sales before 02:00 Berlin wall time belong to the previous restaurant day.
+// Use the local clock rather than subtracting fixed hours across DST changes.
+export function revenueDate(value) {
+  const date=berlinDate(value);
+  return Number(hourFormatter.format(new Date(value)))<2 ? shiftDate(date,-1) : date;
+}
 export function dayStart(date) {
   const midnight = Date.parse(date+'T00:00:00Z');
   let instant = midnight;
@@ -43,19 +49,21 @@ export function dailyEarnings(data, employeeId, date, now = Date.now()) {
 export function dailyStats(data, user, date, now = Date.now()) {
   // Scope even if this helper receives a full state rather than the API's filtered state.
   if(user.role==='driver')data={...data,orders:data.orders.filter(o=>o.employeeId===user.id)};
-  const orders = data.orders.filter(o=>berlinDate(o.createdAt)===date);
-  const completed = data.orders.filter(o=>o.deliveredAt && berlinDate(o.deliveredAt)===date);
+  const reportDate=user.role==='chef'?revenueDate:berlinDate;
+  const orders = data.orders.filter(o=>reportDate(o.createdAt)===date);
+  const completed = data.orders.filter(o=>o.deliveredAt && reportDate(o.deliveredAt)===date);
   const earnings=dailyEarnings(data,user.role==='chef'?null:user.id,date,now);
   const measured=completed.filter(o=>o.completionSource!=='clockOut');
   return {
     orders:orders.length,completed:completed.length,automatic:completed.filter(o=>o.completionSource==='clockOut').length,
     open:data.orders.filter(o=>o.status==='open').length,...earnings,
     revenue:orders.reduce((n,o)=>n+Math.round((o.amount || 0)*100),0)/100,
+    cashRevenue:orders.filter(o=>o.payment==='cash').reduce((n,o)=>n+Math.round((o.amount || 0)*100),0)/100,
     averageMinutes:measured.length ? measured.reduce((n,o)=>n+Math.max(0,Date.parse(o.deliveredAt)-Date.parse(o.createdAt))/60000,0)/measured.length : null,
-    hourly:Array.from({length:24},(_,h)=>({label:String(h).padStart(2,'0')+':00',value:orders.filter(o=>Number(hourFormatter.format(new Date(o.createdAt)))===h).length})),
+    hourly:Array.from({length:24},(_,i)=>{const h=user.role==='chef'?(i+2)%24:i;return {label:String(h).padStart(2,'0')+':00'+(user.role==='chef' && h<2?' (+1)':''),value:orders.filter(o=>Number(hourFormatter.format(new Date(o.createdAt)))===h).length};}),
     weekly:Array.from({length:7},(_,i)=>{
       const key=shiftDate(date,i-6);
-      return {label:key.slice(8)+'.'+key.slice(5,7),value:data.orders.filter(o=>berlinDate(o.createdAt)===key).length};
+      return {label:key.slice(8)+'.'+key.slice(5,7),value:data.orders.filter(o=>reportDate(o.createdAt)===key).length};
     }),
   };
 }

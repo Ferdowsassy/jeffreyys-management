@@ -1,4 +1,4 @@
-import {berlinDate, dayStart, shiftDate, shiftsById, orderWorkDate} from './daily-stats.js';
+import {berlinDate, revenueDate, dayStart, shiftDate, shiftsById, orderWorkDate} from './daily-stats.js';
 import {payroll} from './payroll.js';
 
 export function periodRange(mode, value) {
@@ -37,7 +37,12 @@ export function monthlyPayroll(employee, data, month, now=Date.now()) {
 
 export function periodStats(data,user,mode,value,now=Date.now()) {
   const range=mode==='range'?value:periodRange(mode,value), inRange=d=>Date.parse(d)>=range.from && Date.parse(d)<range.to;
-  const orders=data.orders.filter(o=>['open','delivered','available'].includes(o.status) && inRange(o.createdAt) && (user.role!=='driver' || o.employeeId===user.id));
+  const salesInRange=order=>{
+    if(user.role!=='chef')return inRange(order.createdAt);
+    const date=revenueDate(order.createdAt);
+    return date>=range.first && date<range.end;
+  };
+  const orders=data.orders.filter(o=>['open','delivered','available'].includes(o.status) && salesInRange(o) && (user.role!=='driver' || o.employeeId===user.id));
   const employees=user.role==='chef' ? data.employees : data.employees.filter(e=>e.id===user.id);
   const ownIds=new Set(employees.map(e=>e.id));
   const shiftIndex=shiftsById(data.shifts);
