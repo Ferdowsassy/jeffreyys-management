@@ -25,7 +25,8 @@ test('online and cash tips settle once, stay with their shift month, and are sep
   assert.equal(monthlyPayroll(employee,data,'2026-10',now).tips,0);
   assert.equal(dailyEarnings(data,'d','2026-09-30',now).totalEarnings,50.25);
   assert.equal(periodStats(data,{role:'chef'},'month','2026-09',now).wages,44);
-  assert.equal(periodStats(data,{role:'chef'},'month','2026-10',now).revenue,35);
+  assert.equal(periodStats(data,{role:'chef'},'month','2026-09',now).revenue,35);
+  assert.equal(periodStats(data,{role:'chef'},'month','2026-10',now).revenue,0);
 });
 test('WinOrder imports included tips separately and duplicate receipts never add tips twice',()=>{
   for(const [payment,field] of [['Online bezahlt','tipOnline'],['Bar','tipCash']]) {

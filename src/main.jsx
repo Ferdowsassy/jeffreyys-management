@@ -36,6 +36,7 @@ import { useDriverLocation } from "./location-sharing";
 import {OrderQueue} from './order-queue';
 import {AccountSettings,passkeyLogin} from './workspace-access';
 import {periodStats} from '../shared/accounting';
+import {revenueDate} from '../shared/daily-stats';
 import {PageFinder,HomeShortcuts} from './everyday-tools';
 const DailyStatistics = lazy(() => import("./daily-statistics"));
 const LiveDriverMap = lazy(() => import("./driver-map"));
@@ -705,12 +706,12 @@ export function Drivers({ data }) {
   );
 }
 function Dashboard({ user, data, go, act }) {
-  const today = day(Date.now()), summary=periodStats(data,{role:'chef'},'day',today),
+  const today = revenueDate(Date.now()), summary=periodStats(data,{role:'chef'},'day',today),
     orders=summary.orders,revenue=summary.revenue,cash=summary.cash,wages=summary.wages,
     food=summary.estimatedFood,fixed=summary.estimatedFixed,profit=summary.profit,
     ratio=revenue?wages/revenue*100:0;
-  const buckets = Array.from({ length: 12 }, (_, i) => ({
-    h: i + 11,
+  const buckets = Array.from({ length: 15 }, (_, i) => ({
+    h: (i + 11) % 24,
     total: sum(
       orders.filter(
         (o) =>
@@ -721,7 +722,7 @@ function Dashboard({ user, data, go, act }) {
               timeZone: "Europe/Berlin",
             }).format(new Date(o.createdAt)),
           ) ===
-          i + 11,
+          (i + 11) % 24,
       ),
       (o) => o.amount,
     ),
@@ -731,7 +732,7 @@ function Dashboard({ user, data, go, act }) {
     <>
       <Title
         title="Heute im Überblick"
-        subtitle={new Date().toLocaleDateString("de-DE", {
+        subtitle={new Date(today+"T12:00:00Z").toLocaleDateString("de-DE", {
           weekday: "long",
           day: "numeric",
           month: "long",
@@ -785,7 +786,7 @@ function Dashboard({ user, data, go, act }) {
       <div className="dashboard-grid">
         <Panel
           title="So läuft dein Tag"
-          subtitle="Umsatz nach Uhrzeit · heute"
+          subtitle="Umsatztag bis 02:00 am Folgetag · Berlin"
           action={<Badge>Heute</Badge>}
         >
           <div className="chart-head">
@@ -805,7 +806,7 @@ function Dashboard({ user, data, go, act }) {
                   className="bar"
                   style={{ height: Math.max(2, (b.total / max) * 145) }}
                 />
-                <span className="bar-label">{b.h}</span>
+                <span className="bar-label">{b.h<2?String(b.h).padStart(2,'0')+' (+1)':b.h}</span>
               </div>
             ))}
           </div>

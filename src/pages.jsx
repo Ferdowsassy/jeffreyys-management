@@ -16,7 +16,7 @@ import {payroll as calculatePayroll} from "../shared/payroll";
 import { euro, day, sum, hours, formatHours } from "./finance";
 import {StoreSettings, ReturnTripControls} from "./return-trip";
 import {ShiftApprovals} from "./shift-corrections";
-import {dailyEarnings,dayStart,shiftDate} from "../shared/daily-stats";
+import {dailyEarnings,dayStart,shiftDate,revenueDate} from "../shared/daily-stats";
 import {periodStats} from '../shared/accounting';
 import { scanReceipt } from "./receipt-ocr";
 import { summarizeItems } from "./order-items";
@@ -877,16 +877,10 @@ export function Analytics({ data, notify, act }) {
     [coach, setCoach] = useState(null),
     [busy, setBusy] = useState(false);
   const [itemOrder, setItemOrder] = useState(""), [items, setItems] = useState([]);
-  const end = new Date();
-  end.setHours(23, 59, 59, 999);
   const length = {week: 7, month: 30, quarter: 90, year: 365}[period];
-  end.setDate(end.getDate() + offset * length);
-  const start = new Date(end);
-  start.setDate(start.getDate() - length + 1);
-  start.setHours(0, 0, 0, 0);
-  const prevEnd = new Date(start - 1),
-    prevStart = new Date(start);
-  prevStart.setDate(prevStart.getDate() - length);
+  const last=shiftDate(revenueDate(Date.now()),offset*length),first=shiftDate(last,1-length);
+  const start=new Date(dayStart(first)),end=new Date(dayStart(shiftDate(last,1))-1);
+  const prevStart=new Date(dayStart(shiftDate(first,-length))),prevEnd=new Date(dayStart(first)-1);
   const calc = (a,b) => {
     const first=day(a),last=shiftDate(day(b),1);
     const result=periodStats(data,{role:'chef'},'range',{first,end:last,from:dayStart(first),to:dayStart(last)});
@@ -1020,7 +1014,7 @@ export function Analytics({ data, notify, act }) {
             name,
             euro(
               sum(
-                a.os.filter((o) => new Date(o.createdAt).getDay() === i),
+                a.os.filter((o) => new Date(revenueDate(o.createdAt)+'T12:00:00Z').getUTCDay() === i),
                 (o) => o.amount,
               ),
             ),
