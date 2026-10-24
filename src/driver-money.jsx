@@ -36,11 +36,12 @@ export function DriverFuel({data, act}) {
   </>;
 }
 
-export function OrderTipEditor({order, act}) {
+export function OrderTipEditor({order, act, canEdit=false}) {
   const [open, setOpen] = useState(false);
   return <div className="order-tip-editor">
-    <div className="row"><span>Trinkgeld: <strong>{euro((order.tipOnline || 0)+(order.tipCash || 0))}</strong></span><button className="text-button" onClick={() => setOpen(value => !value)}>{open ? 'Schließen' : 'Trinkgeld bearbeiten'}</button></div>
-    {open && <><p className="muted">Online wird zusätzlich ausgezahlt. Bar hast du bereits erhalten. Beide Beträge sind zusätzlich zum Bestellbetrag.</p>
+    <div className="row"><span>Trinkgeld: <strong>{euro((order.tipOnline || 0)+(order.tipCash || 0))}</strong></span>{canEdit && <button className="text-button" onClick={() => setOpen(value => !value)}>{open ? 'Schließen' : 'Trinkgeld bearbeiten'}</button>}</div>
+    {!canEdit && <p className="muted">Online: {euro(order.tipOnline || 0)} · Bar erhalten: {euro(order.tipCash || 0)}</p>}
+    {canEdit && open && <><p className="muted">Online wird zusätzlich ausgezahlt. Bar hast du bereits erhalten. Beide Beträge sind zusätzlich zum Bestellbetrag.</p>
       <Form key={order.id} initial={{tipOnline:order.tipOnline || 0,tipCash:order.tipCash || 0}} fields={[
         {name:'tipOnline',label:'Online-Trinkgeld (€)',type:'number',min:0,max:100000,step:0.01},
         {name:'tipCash',label:'Bar-Trinkgeld (€)',type:'number',min:0,max:100000,step:0.01},

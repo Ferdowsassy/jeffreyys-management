@@ -642,8 +642,6 @@ export function Driver({ user, data, page, act, notify, go }) {
     },
     { name: "city", label: "Ort", value: "München", required: false },
     moneyField("amount", "Bestellbetrag ohne Trinkgeld (€)"),
-    {...moneyField("tipOnline", "Online-Trinkgeld (€)"),value:0,required:false},
-    {...moneyField("tipCash", "Bar-Trinkgeld (€)"),value:0,required:false},
     {
       name: "payment",
       label: "Zahlungsart",
@@ -794,8 +792,6 @@ export function Driver({ user, data, page, act, notify, go }) {
               await act("addOrder", {
                 ...v,
                 amount: Number(v.amount),
-                tipOnline: Number(v.tipOnline || 0),
-                tipCash: Number(v.tipCash || 0),
                 noAddress: v.noAddress === "true",
               });
               setForm(false);
@@ -833,7 +829,7 @@ export function Driver({ user, data, page, act, notify, go }) {
                     {euro(o.deliveryFee)}
                   </small>
                 </div>
-                <OrderTipEditor order={o} act={act} />
+                <OrderTipEditor order={o} act={act} canEdit={user.role==='chef'} />
                 {o.source === 'winorder' && <OrderDetails order={o} role="driver" act={act} canCorrect />}
                 <div className="row navigation-actions">
                   <NavigationLinks order={o} />
