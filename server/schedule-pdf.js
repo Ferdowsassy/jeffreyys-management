@@ -11,6 +11,11 @@ export function scheduleWeek(weekStart, role='all') {
   if (!['all',...Object.keys(roles)].includes(role)) throw Object.assign(new Error('Ungültige Planrolle.'),{status:400});
   return Array.from({length:7},(_,i)=>shiftDate(weekStart,i));
 }
+export function scheduleWeekNumber(weekStart) {
+  const days=scheduleWeek(weekStart);
+  const thursday=new Date(days[3]+'T00:00:00Z'),year=thursday.getUTCFullYear();
+  return {year,week:Math.ceil(((thursday-new Date(Date.UTC(year,0,1)))/86400000+1)/7)};
+}
 export function schedulePdf(data, weekStart, role='all') {
   const days=scheduleWeek(weekStart,role);
   const doc=new PDFDocument({size:'A4',layout:'landscape',margin:32,bufferPages:true,info:{Title:'Stundenplan '+weekStart,Author:'Jeffreyys'}});
@@ -19,8 +24,7 @@ export function schedulePdf(data, weekStart, role='all') {
   const left=32,width=doc.page.width-64,nameWidth=134,dayWidth=(width-nameWidth)/7;
   const bottom=doc.page.height-64;
   const entries=data.schedule.filter(entry=>days.includes(entry.date));
-  const thursday=new Date(days[3]+'T12:00:00Z'),year=thursday.getUTCFullYear();
-  const week=Math.ceil(((thursday-new Date(Date.UTC(year,0,1)))/86400000+1)/7);
+  const {year,week}=scheduleWeekNumber(weekStart);
   function title() {
     doc.fillColor('#284b3d').font('Helvetica-Bold').fontSize(22).text('jeffreyys',left,28);
     doc.fontSize(18).text('Stundenplan',left,62);

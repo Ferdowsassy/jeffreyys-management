@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fixture} from './test-helper.js';
-import {scheduleWeek} from './schedule-pdf.js';
+import {scheduleWeek,scheduleWeekNumber} from './schedule-pdf.js';
 
 test('weekly schedule download is chef-only and validates week and role',async t=>{
   const {base,login}=await fixture(t);
@@ -18,4 +18,9 @@ test('weekly schedule download is chef-only and validates week and role',async t
     assert.equal(Buffer.from(await pdf.arrayBuffer()).subarray(0,4).toString(),'%PDF');
   }
   assert.deepEqual(scheduleWeek('2026-12-28'),['2026-12-28','2026-12-29','2026-12-30','2026-12-31','2027-01-01','2027-01-02','2027-01-03']);
+});
+
+test('PDF calendar weeks use ISO week numbering across New Year',()=>{
+  for(const [monday,week,year] of [['2027-01-04',1,2027],['2027-01-11',2,2027],['2026-12-28',53,2026],['2025-12-29',1,2026],['2020-12-28',53,2020]])
+    assert.deepEqual(scheduleWeekNumber(monday),{week,year});
 });
