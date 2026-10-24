@@ -73,3 +73,42 @@ test('private fuel CRUD stays out of other accounts, chef exports, audit, expens
   assert.equal((await request('/api/action',{type:'deleteDriverFuel',id:entry.id},leo)).status,200);
   assert.deepEqual((await request('/api/state',undefined,leo)).body.driverFuel,[]);
 });
+
+test('available-order updates explicitly clear removed tips for zero and omitted source fields',()=>{
+  for(const payment of ['Online bezahlt','Bar']) for(const remove of ['zero','omit']) {
+    const s=seed();
+    importWinorder(s,parseWinorder(sample(payment)));
+    const payload=JSON.parse(sample(payment));
+    if(remove==='zero')payload.OrderList.Order.AddInfo.Tip='0';else delete payload.OrderList.Order.AddInfo.Tip;
+    const updated=parseWinorder(Buffer.from(JSON.stringify(payload)));
+    assert.equal(importWinorder(s,updated).updated,1);
+    const order=s.orders.find(o=>o.source==='winorder');
+    assert.equal(order.amount,23.25);assert.equal(order.tipOnline,0);assert.equal(order.tipCash,0);
+    assert.equal(importWinorder(s,updated).duplicates,1);
+    Object.assign(order,{employeeId:'leo',status:'delivered'});
+    const p=payroll(s)[s.employees.findIndex(e=>e.id==='leo')];
+    assert.equal(p.onlineTips,0);assert.equal(p.cashTips,0);
+  }
+});
+
+test('unchanged pre-tip imports remain duplicates without rewriting historical accounting',()=>{
+  // Captured from parseWinorder at main revision 0b24d94, before tip accounting.
+  const hashes={'Online bezahlt':'57a35340e7e249f049bc8e4e85bd84c3247353481e3d1bfc82ebb2d4991ccb28',
+    Bar:'6f82cac18f7284bd33a62ddaaca55e7979c468e796a3d18b9e1661c6ae51f251'};
+  for(const payment of Object.keys(hashes)) for(const status of ['available','open','delivered']) {
+    const s=seed(), parsed=parseWinorder(sample(payment));
+    importWinorder(s,parsed);
+    const old=s.orders.find(o=>o.source==='winorder');
+    Object.assign(old,{amount:23.25,sourceHash:hashes[payment],status,employeeId:status==='available'?null:'leo'});
+    delete old.tipOnline;delete old.tipCash;
+    // A chef's historical correction must also survive an unchanged retry.
+    if(status==='delivered')old.amount=21;
+    const before=structuredClone(old);
+    assert.equal(importWinorder(s,parsed).duplicates,1);
+    assert.deepEqual(old,{...before,sourceHash:parsed[0].sourceHash});
+    assert.equal(importWinorder(s,parsed).duplicates,1);
+    const changed=parseWinorder(sample(payment,'4.25'));
+    if(status==='available')assert.equal(importWinorder(s,changed).updated,1);
+    else assert.throws(()=>importWinorder(s,changed),error=>error.status===409);
+  }
+});
