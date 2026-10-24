@@ -26,19 +26,10 @@ export function payroll(state, now = Date.now()) {
     const collected = orders
       .filter((o) => o.payment === "cash")
       .reduce((sum, o) => sum + cents(o.amount), 0);
-    // A physical return acknowledged by the driver is provisional until counted by chef.
+    // Preserve only returns actually confirmed before cash handoffs were retired.
     const returned = state.handoffs
-      .filter((h) => h.employeeId === employee.id)
-      .reduce(
-        (sum, h) =>
-          sum +
-          (h.chefConfirmed
-            ? cents(h.counted)
-            : h.driverConfirmed
-              ? cents(h.expected)
-              : 0),
-        0,
-      );
+      .filter((h) => h.employeeId === employee.id && h.chefConfirmed)
+      .reduce((sum,h)=>sum+cents(h.counted),0);
     const retained = Math.max(0, collected - returned);
     return {
       employeeId: employee.id,
@@ -56,9 +47,7 @@ export function payroll(state, now = Date.now()) {
       returnedCash: euros(returned),
       retainedCash: euros(retained),
       payout: euros(hourlyCents + deliveryCents - retained),
-      pendingHandoffs: state.handoffs.filter(
-        (h) => h.employeeId === employee.id && !h.chefConfirmed && !h.cashRetained,
-      ).length,
+      pendingHandoffs: 0,
     };
   });
 }

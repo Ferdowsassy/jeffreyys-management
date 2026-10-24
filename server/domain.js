@@ -159,15 +159,6 @@ export function filterState(state, user) {
   }
   return s;
 }
-function createHandoff(s, shift, cashConfirmed, now, cashRetained = false) {
-  if (s.handoffs.some(h => h.shiftId === shift.id)) return null;
-  const expected = euros(s.orders.filter(o => o.shiftId === shift.id && o.status === "delivered" && o.payment === "cash").reduce((n,o) => n+cents(o.amount),0));
-  const owner = s.employees.find(e => e.id === shift.employeeId);
-  if (owner.role !== "driver" && expected === 0) return null;
-  const handoff = {id:randomUUID(), employeeId:shift.employeeId, shiftId:shift.id, expected, counted:null, driverConfirmed:cashConfirmed, chefConfirmed:false, cashRetained, createdAt:now, demo:false};
-  s.handoffs.push(handoff);
-  return handoff;
-}
 function validateShiftRange(s, employeeId, shiftId, start, end) {
   if (Date.parse(start) > Date.now() || (end && (Date.parse(end) <= Date.parse(start) || Date.parse(end) > Date.now())))
     fail("Beginn und Ende müssen in der Vergangenheit liegen; Ende muss nach Beginn liegen.");
@@ -182,7 +173,6 @@ function applyShiftCorrection(s, shift, start, end, now) {
   if (!shift.end && end) {
     if (s.orders.some(o => o.shiftId === shift.id && o.status === "open"))
       fail("Deliver all open orders before closing shift", 409);
-    createHandoff(s, shift, false, now);
     delete lookup(s.employees, shift.employeeId).location;
     delete lookup(s.employees, shift.employeeId).returnTrip;
   }
@@ -231,7 +221,7 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
       shift.clockedOutAt = now;
       delete employee().location;
       delete employee().returnTrip;
-      result = createHandoff(s, shift, false, now, true);
+      result = shift;
       break;
     }
     case 'assignOrder': {
@@ -629,12 +619,7 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
       break;
     case "confirmHandoff": {
       requireRole(user, "chef");
-      result = lookup(s.handoffs, p.id);
-      if (result.chefConfirmed) fail("Handoff already confirmed", 409);
-      result.counted = money(p.counted, "counted cash");
-      result.chefConfirmed = true;
-      result.confirmedAt = now;
-      result.confirmedBy = user.id;
+      fail("Bargeld bleibt beim Fahrer und wird automatisch verrechnet. Bargeldübergaben sind deaktiviert.",410);
       break;
     }
     case "requestShiftCorrection": {

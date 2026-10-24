@@ -91,7 +91,7 @@ Employees optionally have `phone` (up to 40 characters). Orders optionally have 
 | saveSchedule | `employeeId,date,start,end` | Chef; upserts one shift per employee/date; overnight permitted |
 | copyWeek | `weekStart` | Chef; copies the previous seven-day range into the displayed week; skips existing employee/date entries |
 | saveSettings | any of `foodCostPercent,fixedCosts,longShiftHours,flatFee` | Chef; partial updates preserve omitted values; percentages 0–100, threshold 1–24 hours |
-| confirmHandoff | `id,counted` | Chef; counted physical cash, one confirmation only |
+| confirmHandoff | retired | Chef receives HTTP 410; cash handoffs are disabled |
 | updateShift | `id,start,end` | Chef; ISO timestamps, nullable end; rejects future times, overlap, duplicate active shifts; preserves wage snapshot |
 | clearDemo | none | Chef; removes demo orders/shifts/schedules/tasks/handoffs/audit; retains accounts and zones, removes their demo flags to preserve access/configuration |
 | reset | `confirmation:'RESET'` | Chef; replaces data with fresh demo seed and revokes all sessions; frontend must sign in again |
@@ -107,10 +107,10 @@ Location writes use the normal transaction and SSE invalidation path, but do not
 - Snapshot hourly rate at clock-in and delivery fee at order creation; later rate edits do not rewrite history.
 - Hours × snapshot wage is rounded once per shift to cents. Delivery pay includes only delivered orders.
 - Cash collected includes **delivered cash orders only**. Online/open orders are not cash owed.
-- Clock-out always retains cash with the driver. Legacy handoffs with `driverConfirmed:true` still represent a provisional physical return until chef counting. New retained-cash records have `cashRetained:true` and do not count as pending physical handoffs.
-- Chef-confirmed `counted` replaces (does not add to) the driver's provisional return.
+- Drivers always keep collected cash. Delivery/clock-out deducts it automatically from their earnings. Neither clock-out nor a manual shift correction creates a cash handoff or an approval task. `pendingHandoffs` remains zero for API compatibility.
+- Only historical chef-confirmed cash returns remain credited, preserving prior settlements. Unconfirmed legacy claims do not reduce the cash deduction. No new confirmations are accepted.
 - `retainedCash = max(0, collectedCash - returnedCash)`.
-- `payout = hourlyPay + deliveryPay - retainedCash`. A negative payout means cash still owed; it is not silently clamped to zero. Returned cash is never subtracted from payroll a second time.
+- `payout = hourlyPay + deliveryPay - retainedCash`. A negative payout means the driver has collected more cash than their earnings; the balance stays visible and is not silently clamped to zero. Returned cash is never subtracted from payroll a second time.
 
 Payroll is a live all-record summary, not a legally certified payslip or a settlement-history system. Active shift hours continue growing. There is no tax/overtime engine, paid-out-period ledger, or statutory break calculation.
 
@@ -138,7 +138,7 @@ Tests cover real HTTP auth, role isolation, unauthorized writes, financial snaps
 
 Drivers and kitchen staff submit `requestShiftCorrection {shiftId,start,end,reason}` for their own shifts, or omit `shiftId` for a completely missed shift. Both proposed timestamps must be in the past; end must follow start. Requests are stored separately in `shiftRequests` and never change payroll before approval. Non-chef state responses include only the employee's own requests.
 
-Chef `reviewShiftCorrection {id,decision:"approved"|"rejected"}` decides each pending request once. Approval rechecks overlap and the original shift snapshot, uses the existing cash handoff rules when closing an active shift, and applies the correction transactionally. A newly recorded missed shift uses the historical wage rate for its start date in Berlin. Rejection preserves recorded time. Requests retain the reason, original/proposed times, decision, reviewer and decision timestamp; actions enter the audit log. The owner sees a persistent in-app notification and pending count under Zeiten, updated through the existing live connection. No email or phone push is sent.
+Chef `reviewShiftCorrection {id,decision:"approved"|"rejected"}` decides each pending request once. Approval rechecks overlap and the original shift snapshot, keeps collected cash charged to the employee without creating a handoff when closing an active shift, and applies the correction transactionally. A newly recorded missed shift uses the historical wage rate for its start date in Berlin. Rejection preserves recorded time. Requests retain the reason, original/proposed times, decision, reviewer and decision timestamp; actions enter the audit log. The owner sees a persistent in-app notification and pending count under Zeiten, updated through the existing live connection. No email or phone push is sent.
 
 The file store initializes the new collection for existing files; MySQL creates `jm_shiftRequests` automatically on startup. JSON-to-MySQL migration treats a missing collection as empty.
 
@@ -154,7 +154,7 @@ A route provider key and a confirmed store address must be configured before rea
 
 ### Automatic deliveries on clock-out and daily statistics
 
-`clockOut` no longer requires `cashConfirmed`; any legacy field is ignored. Within one storage transaction it marks the employee's open orders delivered with `deliveredAt` equal to clock-out time and `completionSource:"clockOut"`, closes the shift, clears location/return route, and records a handoff with `driverConfirmed:false` and `cashRetained:true`. Payroll includes the delivered fees and deducts retained cash. Existing handoffs and prior cash returns are preserved. Chef `confirmHandoff` can acknowledge a later actual return and reverse the corresponding deduction; this is an explicit physical-cash action, never implied by clock-out. Negative payouts remain visible.
+`clockOut` no longer requires `cashConfirmed`; any legacy field is ignored. Within one storage transaction it marks the employee's open orders delivered with `deliveredAt` equal to clock-out time and `completionSource:"clockOut"`, closes the shift, clears location/return route without creating a cash handoff or approval task. Payroll includes the delivered fees and deducts retained cash. Historical chef-confirmed returns are preserved; unconfirmed claims have no effect on the deduction. Chef `confirmHandoff` is retired and returns HTTP 410 without changing records. Negative payouts remain visible.
 
 The Statistik tab uses already-authorized state: driver data stays own-only; kitchen sees operational counts and only their own financial values; chef sees business revenue and wages. Daily counts distinguish orders created on the selected day, deliveries completed on that day (including automatic closures), and currently open orders. Work hours and associated delivery earnings/cash belong entirely to the shift's Berlin start date, including after midnight and across period boundaries; actual elapsed time still accounts for DST. Legacy orders without a matching shift use their receipt date. Driver cash balance and payout cards are clearly labeled all-record totals, rather than a settled daily payslip. Hourly counts and a seven-day order trend include accessible value tables. Average delivery minutes exclude automatic clock-out completions, whose actual delivery time is unknown.
 

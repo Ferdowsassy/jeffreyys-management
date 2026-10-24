@@ -14,24 +14,23 @@ test('frontend payroll matches server for open orders, overreturns and per-shift
   const a=backendPayroll(s)[0], b=frontendPayroll(s.employees[0],s,'2026-09');
   assert.deepEqual(b,{hours:a.hours,wages:a.hourlyPay,fees:a.deliveryPay,gross:a.gross,cash:a.collectedCash,returned:a.returnedCash,retained:a.retainedCash,payout:a.payout,paid:0,balance:a.payout});
 });
-test('shift corrections cannot reopen settled cash or bypass handoff on manual close', () => {
+test('shift corrections cannot reopen closed shifts and do not create cash handoffs', () => {
  const {s,chef,driver} = setup();
  const closed=s.shifts.find(x=>x.id==='demo-shift-previous');
  assert.throws(()=>action(s,chef,{type:'updateShift',id:closed.id,start:closed.start,end:null}),/reopen/);
  const shift=s.shifts.find(x=>x.employeeId===driver.id);
  action(s,chef,{type:'updateShift',id:shift.id,start:shift.start,end:new Date().toISOString()});
- assert.equal(s.handoffs.filter(h=>h.shiftId===shift.id).length,1);
- assert.equal(s.handoffs.find(h=>h.shiftId===shift.id).expected,32.5);
- assert.equal(s.handoffs.find(h=>h.shiftId===shift.id).driverConfirmed,false);
+ assert.equal(s.handoffs.filter(h=>h.shiftId===shift.id).length,0);
+ assert.equal(backendPayroll(s).find(p=>p.employeeId===driver.id).retainedCash,32.5);
  action(s,chef,{type:'updateShift',id:shift.id,start:shift.start,end:shift.end});
- assert.equal(s.handoffs.filter(h=>h.shiftId===shift.id).length,1);
+ assert.equal(s.handoffs.filter(h=>h.shiftId===shift.id).length,0);
 });
 test('clearing demo preserves entire cash dependency groups touched by real activity', () => {
  const {s,chef,driver} = setup();
  const order=action(s,driver,{type:'addOrder',noAddress:true,payment:'cash',amount:10,orderNumber:'REAL'});
  action(s,driver,{type:'delivered',id:order.id});
- const handoff=action(s,driver,{type:'clockOut',cashConfirmed:true});
- const expected=handoff.expected;
+ action(s,driver,{type:'clockOut',cashConfirmed:true});
+ const expected=s.orders.filter(o=>o.shiftId===order.shiftId).reduce((n,o)=>n+o.amount,0);
  action(s,chef,{type:'clearDemo'});
  assert.ok(s.shifts.some(x=>x.id===order.shiftId));
  assert.equal(s.orders.filter(o=>o.shiftId===order.shiftId).reduce((n,o)=>n+o.amount,0),expected);

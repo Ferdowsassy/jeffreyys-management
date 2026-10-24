@@ -430,61 +430,6 @@ export function Management({ user, data, page, act, notify, onAccess }) {
         />
       </Panel></>
     );
-  if (page === "Kasse")
-    body = (
-      <Panel title="Bargeld-Übergaben">
-        <div className="handoffs">
-          {data.handoffs.map((h) => (
-            <div className="handoff" key={h.id}>
-              <div>
-                <strong>{person(data, h.employeeId)}</strong>
-                <small>{new Date(h.createdAt).toLocaleString("de-DE")}</small>
-                <p>
-                  Erwartet <b>{euro(h.expected)}</b>
-                </p>
-                <Badge tone={h.driverConfirmed ? "green" : "orange"}>
-                  {h.cashRetained && !h.chefConfirmed ? "Beim Fahrer · vom Lohn abgezogen" : h.driverConfirmed
-                    ? "Fahrer bestätigt"
-                    : "Fahrerbestätigung offen"}
-                </Badge>
-              </div>
-              {h.chefConfirmed ? (
-                <div>
-                  <Badge
-                    tone={
-                      Number(h.counted) === Number(h.expected)
-                        ? "green"
-                        : "orange"
-                    }
-                  >
-                    Gezählt: {euro(h.counted)}
-                  </Badge>
-                  <p>Differenz: {euro(h.counted - h.expected)}</p>
-                </div>
-              ) : (
-                <Form
-                  fields={[
-                    moneyField(
-                      "counted",
-                      "Tatsächlich gezählt (€)",
-                      h.expected,
-                    ),
-                  ]}
-                  submit={h.cashRetained ? "Nachträgliche Bargeldabgabe bestätigen" : "Übergabe bestätigen"}
-                  onSubmit={(v) =>
-                    act("confirmHandoff", {
-                      id: h.id,
-                      counted: Number(v.counted),
-                    })
-                  }
-                />
-              )}
-            </div>
-          ))}
-          {!data.handoffs.length && <Empty>Keine Übergaben offen.</Empty>}
-        </div>
-      </Panel>
-    );
   if (page === "Kunden") body=<Customers data={data} act={act} />;
   if (page === "Zeiten") {
     const shifts = data.shifts.filter((s) => day(s.start) === date);
@@ -781,7 +726,7 @@ export function Driver({ user, data, page, act, notify, go }) {
               )}
               <ClockOut active={active} act={act} />
             </div>
-          {user.role === "driver" && <details className="shift-help"><summary>Was passiert beim Ausstempeln?</summary><p>Offene Lieferungen werden als zugestellt markiert. Bargeld bleibt bei dir und wird von der Auszahlung abgezogen.</p></details>}
+          {user.role === "driver" && <details className="shift-help"><summary>Was passiert beim Ausstempeln?</summary><p>Offene Lieferungen werden als zugestellt markiert. Bargeld bleibt immer bei dir und wird automatisch von deiner Auszahlung abgezogen. Du musst nichts abgeben; der Chef muss nichts bestätigen.</p></details>}
           </Panel>
           {user.role === "driver" && (
             <div className="quick-actions">

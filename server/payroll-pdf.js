@@ -26,7 +26,7 @@ export function payrollPdf(data,employees,month,now=Date.now()) {
   row(['Gesamt',...['gross','retained','paid','balance'].map(k=>euro(rows.reduce((n,r)=>n+r[k],0)))],[155,90,90,90,90],{header:true});
   for(const r of rows){
     doc.addPage();title(r.e.name+' · '+role[r.e.role]);
-    for(const [label,value] of [['Arbeitszeit',duration(r.hours)],['Stundenlohn gesamt',euro(r.wages)],['Liefergeld',euro(r.fees)],['Verdienst vor Bargeldabzug',euro(r.gross)],['Bar kassiert (zugestellte Bestellungen)',euro(r.cash)],['Bargeld zurückgegeben',euro(r.returned)],['Bargeldabzug',euro(r.retained)],['Auszahlung vor Zahlungen',euro(r.payout)],['Bereits ausgezahlt',euro(r.paid)],['Noch offen',euro(r.balance)]])row([label,value],[350,165]);
+    for(const [label,value] of [['Arbeitszeit',duration(r.hours)],['Stundenlohn gesamt',euro(r.wages)],['Liefergeld',euro(r.fees)],['Verdienst vor Bargeldabzug',euro(r.gross)],['Bar kassiert (zugestellte Bestellungen)',euro(r.cash)],...(r.returned ? [['Frühere bestätigte Bargeldrückgabe',euro(r.returned)]] : []),['Bargeldabzug',euro(r.retained)],['Auszahlung vor Zahlungen',euro(r.payout)],['Bereits ausgezahlt',euro(r.paid)],['Noch offen',euro(r.balance)]])row([label,value],[350,165]);
     doc.moveDown();doc.font('Helvetica-Bold').fontSize(12).text('Arbeitszeit und Verdienst pro Tag');doc.moveDown(.5);
     row(['Tag','Arbeitszeit','Lohn','Liefergeld','Verdienst'],[95,135,95,95,95],{header:true});
     const range=periodRange('month',month);
@@ -37,7 +37,7 @@ export function payrollPdf(data,employees,month,now=Date.now()) {
     if(!payments.length)row(['Keine Zahlungen erfasst.','','',''],[185,100,100,130]);
     for(const p of payments)row([berlinDate(p.createdAt),p.method==='cash'?'Bar':'Überweisung',euro(p.amount),p.note || '-'],[90,100,100,225]);
     if(doc.y>700){doc.addPage();title('Fortsetzung');}
-    doc.moveDown();doc.font('Helvetica').fontSize(9).text('Auszahlung = Lohn + Liefergeld - einbehaltenes Bargeld. Die gesamte Schicht und zugehörige Lieferungen zählen zum Berliner Tag des Schichtbeginns, auch nach Mitternacht. Bereits erfasste Gehaltszahlungen verringern den offenen Betrag. Laufende Schichten sind vorläufig.');
+    doc.moveDown();doc.font('Helvetica').fontSize(9).text('Auszahlung = Lohn + Liefergeld - beim Fahrer verbleibendes Bargeld. Barzahlungen werden automatisch nach Zustellung verrechnet; keine Bargeldübergabe erforderlich. Die gesamte Schicht und zugehörige Lieferungen zählen zum Berliner Tag des Schichtbeginns, auch nach Mitternacht. Bereits erfasste Gehaltszahlungen verringern den offenen Betrag. Laufende Schichten sind vorläufig.');
   }
   const pages=doc.bufferedPageRange();
   for(let i=pages.start;i<pages.start+pages.count;i++){doc.switchToPage(i);doc.font('Helvetica').fontSize(8).fillColor('#65756c').text('JEFFREYYS / '+month+' / Seite '+(i+1)+' von '+pages.count,40,786,{lineBreak:false});}

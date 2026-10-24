@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { fixture } from "./test-helper.js";
 import { payroll } from "./domain.js";
-test("payroll counts returned cash once, with chef counts overriding provisional returns", () => {
+test("cash is always retained except for previously chef-confirmed historical returns", () => {
   const base = {
     employees: [{ id: "d" }],
     shifts: [
@@ -41,7 +41,8 @@ test("payroll counts returned cash once, with chef counts overriding provisional
       chefConfirmed: false,
     },
   ];
-  assert.equal(payroll(base)[0].payout, 32);
+  assert.equal(payroll(base)[0].payout, 12);
+  assert.equal(payroll(base)[0].pendingHandoffs,0);
   base.handoffs[0].counted = 18;
   base.handoffs[0].chefConfirmed = true;
   assert.equal(payroll(base)[0].payout, 30);
