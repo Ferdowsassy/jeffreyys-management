@@ -3,6 +3,7 @@ import {MapPin, Navigation} from 'lucide-react';
 import {Form} from './main';
 import {customerInfo,orderReference} from './customer-info';
 import {euro} from './finance';
+import {winorderPlaceId} from '../shared/winorder-fields';
 
 const text = value => ['string','number','boolean'].includes(typeof value) ? String(value) : '';
 const list = value => !value ? [] : Array.isArray(value) ? value : [value];
@@ -22,9 +23,11 @@ const labels = {
 export function NavigationLinks({order}) {
   if (!order.address?.trim() || order.noAddress) return null;
   const destination=[order.address.trim(),[order.postalCode,order.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  const placeId=winorderPlaceId(order.address);
+  const google='https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(placeId ? 'Lieferadresse' : destination)+(placeId ? '&destination_place_id='+encodeURIComponent(placeId) : '');
   return <>
-    <a className="secondary" aria-label="Google Maps öffnen" href={'https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(destination)} target="_blank" rel="noreferrer"><MapPin size={17} />Google Maps</a>
-    <a className="secondary" aria-label="Waze öffnen" href={'https://waze.com/ul?q='+encodeURIComponent(destination)+'&navigate=yes&utm_source=jeffreyys-management'} target="_blank" rel="noreferrer"><Navigation size={17} />Waze</a>
+    <a className="secondary" aria-label="Google Maps öffnen" href={google} target="_blank" rel="noreferrer"><MapPin size={17} />Google Maps</a>
+    {!placeId && <a className="secondary" aria-label="Waze öffnen" href={'https://waze.com/ul?q='+encodeURIComponent(destination)+'&navigate=yes&utm_source=jeffreyys-management'} target="_blank" rel="noreferrer"><Navigation size={17} />Waze</a>}
   </>;
 }
 
@@ -51,9 +54,10 @@ function Article({article,extra=false}) {
 }
 
 export function CustomerContact({order,info,showNotes=true}) {
-  const {displayName,company,phone,mobile,email,notes}=info || customerInfo(order);
+  const {displayName,company,phone,mobile,email,notes,providerReference}=info || customerInfo(order);
   return <div className="order-customer">
     <p><strong>{displayName || company || 'Name nicht übermittelt'}</strong></p>
+    {providerReference && <p>Portal-Bestellnummer: <strong>{providerReference}</strong></p>}
     {company && displayName && <p className="customer-company">{company}</p>}
     {(phone || mobile || email) && <div className="order-contact-actions">
       {phone && <a className="secondary" href={'tel:'+phone} aria-label={'Anrufen: '+phone}>{phone}</a>}

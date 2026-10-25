@@ -114,6 +114,27 @@ sender. When investigating, match a controlled WinOrder retry to its timestamp.
 
 ## Checks
 
+Uber Eats forwarding can place `81249 München, Deutschland` in `City` instead
+of sending `Zip`. The importer separates those fields and recognizes
+`UberEats Onlinezahlung` as prepaid, including any transmitted tip. Zero-price
+unnamed article comments supply the portal reference, delivery instructions,
+masked telephone number and telephone access code. Source fields remain intact.
+When `DeliverType` is omitted, no unsupported-type warning is added; explicit
+unknown values still require checking.
+
+Some Uber deliveries contain only `Places-ID: …` in `Street`. Google Maps opens
+that ID directly without an API key. Postal-address lookup uses the existing
+chef Google Places setting when configured; failed lookups retain the missing
+address warning and never reject the order. Without a key, enter the address
+manually from Maps. Existing accounting and reviewed corrections are preserved.
+
+`DB_CONFIG_FILE=/private/database.env node scripts/repair-winorder-fields.mjs`
+previews a repair from retained source details. Add `--apply /private/backup-dir`
+to back up affected records privately and commit the repair in one transaction.
+It fills missing PLZ/contact fields and unresolved active prepaid payments;
+it does not alter historical amounts, payments, tips, delivery fees or reviewed
+orders. No source resend or schema migration is required for this repair.
+
 `node --test server/winorder.test.js` exercises real HTTP authentication,
 persistence, duplicate protection, atomic competing claims, role isolation,
 review, release/reassignment, payment handling, encoding, pickup filtering and

@@ -1,17 +1,20 @@
+import {winorderFields,usablePhone} from '../shared/winorder-fields.js';
 const text = value => typeof value==='string' || typeof value==='number' ? String(value).trim() : '';
 const fullName = value => [text(value?.FirstName),text(value?.LastName)].filter(Boolean).join(' ');
 
 export function customerInfo(order) {
   const customer=order.winorderDetails?.Customer || {}, address=customer.DeliveryAddress || {};
+  const fields=winorderFields(order.winorderDetails);
   const name=fullName(address) || text(order.customerName) || fullName(customer);
-  const phone=text(address.PhoneNo) || text(order.customerPhone) || text(customer.PhoneNo);
-  const mobile=text(address.Mobile) || text(customer.Mobile);
+  const phone=usablePhone(address.PhoneNo) || usablePhone(order.customerPhone) || fields.customerPhone || usablePhone(customer.PhoneNo);
+  const mobile=usablePhone(address.Mobile) || usablePhone(customer.Mobile);
   return {
     name, displayName:[name && text(address.Title || customer.Title),name].filter(Boolean).join(' '),
     company:text(address.Company) || text(customer.Company), phone, mobile:mobile===phone ? '' : mobile,
     email:text(address.EMail || address.Email) || text(customer.EMail || customer.Email),
     number:text(customer.CustomerNo),
-    notes:text(order.deliveryNotes) || [text(address.AddAddress),text(address.DescriptionOfWay),text(order.winorderDetails?.AddInfo?.Comment)].filter(Boolean).join('\n'),
+    notes:[...new Set([...text(order.deliveryNotes).split('\n'),...fields.deliveryNotes.split('\n')].filter(Boolean))].join('\n'),
+    providerReference:fields.providerReference,
   };
 }
 
