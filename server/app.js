@@ -7,6 +7,7 @@ import { createStore, safeEmployee, checkPin, hashPin } from "./store.js";
 import { createMysqlStore } from "./mysql-store.js";
 import {prepareReturnTrip, searchStore} from "./return-routing.js";
 import {resolveReceiptMaps} from "./receipt-maps.js";
+import {resolveWinorderAddresses} from './winorder-address.js';
 import {winorderCredentials, authenticateWinorder, parseWinorder, importWinorder} from "./winorder.js";
 import {createWinorderDiagnostics} from './winorder-diagnostics.js';
 import { filterState, action, fail, payroll } from "./domain.js";
@@ -228,6 +229,7 @@ export async function createApp({
   }, express.raw({type:() => true, limit:'1mb'}), async (req, res, next) => {
     try {
       const orders = parseWinorder(req.body);
+      await resolveWinorderAddresses(orders,store.read().settings.googleMapsServerKey || process.env.GOOGLE_MAPS_SERVER_KEY || '',receiptMapsFetch);
       const result = await store.transact(state => importWinorder(state, orders));
       invalidate();
       void notifyPush({roles:['chef','driver'],message:'Neue Bestellungen sind verfügbar.'}).catch(()=>{});

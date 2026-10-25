@@ -1,6 +1,7 @@
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { berlinDate } from '../shared/daily-stats.js';
+import {winorderFields} from '../shared/winorder-fields.js';
 
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), {status}); };
 const list = value => value === undefined || value === '' ? [] : Array.isArray(value) ? value : [value];
@@ -159,8 +160,25 @@ export function parseWinorder(body, now = new Date().toISOString()) {
     // fields, prices, discounts, customer names and toppings. ServerData is
     // technical request metadata; its order timestamp is already normalized.
     const {ServerData, ...winorderDetails} = order;
-    return {...record, winorderDetails,
-      sourceHash:hash(JSON.stringify({...record, createdAt:null, winorderDetails:canonicalDetails(winorderDetails)})).toString('hex')};
+    // Keep the source fingerprint stable across normalization changes, so an
+    // unchanged resend never overwrites driver/chef corrections or conflicts
+    // with an already assigned order.
+    const sourceHash=hash(JSON.stringify({...record, createdAt:null, winorderDetails:canonicalDetails(winorderDetails)})).toString('hex');
+    const fields=winorderFields(winorderDetails);
+    if(!type)record.reviewIssues=record.reviewIssues.filter(issue=>issue!=='Lieferart prüfen');
+    if(fields.prepaid && record.payment===null) {
+      record.payment='online';
+      if(importedTip!==null && amount!==null && importedTip<=amount) {
+        record.tipOnline=importedTip;
+        record.amount=Math.round((amount-importedTip)*100)/100;
+        record.reviewIssues=record.reviewIssues.filter(issue=>issue!=='Trinkgeld prüfen');
+      }
+      record.reviewIssues=record.reviewIssues.filter(issue=>issue!=='Zahlungsart prüfen');
+    }
+    Object.assign(record,{postalCode:fields.postalCode,city:fields.city,customerPhone:fields.customerPhone,deliveryNotes:fields.deliveryNotes});
+    if(street && /^\d{5}$/.test(record.postalCode) && record.city)
+      record.reviewIssues=record.reviewIssues.filter(issue=>issue!=='Lieferadresse ergänzen');
+    return {...record,winorderDetails,sourceHash};
   });
 }
 export function importWinorder(state, orders, now = new Date().toISOString()) {

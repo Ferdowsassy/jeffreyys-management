@@ -22,11 +22,12 @@ async function login(name,pin,mobile=false) {
   await page.getByRole('button',{name:new RegExp(name)}).click();
   await page.getByLabel('PIN',{exact:true}).fill(pin);
   await page.getByRole('button',{name:'Anmelden',exact:true}).click();
-  await page.locator('.sidebar').waitFor();
+  await page.locator('.sidebar').waitFor({state:'attached'});
   return {page,context};
 }
 async function nav(page,name) {
   if(page.viewportSize().width<768)await page.getByRole('button',{name:'Menü',exact:true}).click();
+  name=({Geld:'Lohnabrechnung',Tour:'Meine Tour',Belege:'Meine Belege'})[name] || name;
   await page.locator('.sidebar').getByRole('button',{name:new RegExp('^'+name+'(?:\\s*\\d+)?$')}).click();
 }
 async function fits(page) {
@@ -64,7 +65,7 @@ try {
   // A replay of the same successful request cannot record a second payout.
   expect((await chef.context.request.post(base+'/api/action',{data:response.request().postDataJSON()})).status()).toBe(200);
   expect(app.locals.store.read().salaryPayments).toHaveLength(1);
-  await chef.page.reload();await chef.page.locator('.sidebar').waitFor();await nav(chef.page,'Geld');
+  await chef.page.reload();await chef.page.locator('.sidebar').waitFor({state:'attached'});await nav(chef.page,'Geld');
   await expect(chef.page.getByText('UI-Auszahlung',{exact:true})).toBeVisible();
   await chef.page.setViewportSize({width:390,height:844});
   await expect(chef.page.locator('.sidebar')).not.toBeInViewport();
@@ -106,7 +107,7 @@ try {
   await chefCard.getByText('Bestellte Artikel',{exact:true}).click();
   await expect(chefCard.getByText('2 × Cheeseburger · Groß',{exact:true})).toBeVisible();
   await chefCard.getByText('Alle Bestellangaben',{exact:true}).click();
-  for(const value of ['Testgutschein','TEST-PORTAL-100','Rechnungsstraße'])await expect(chefCard.getByText(value,{exact:true})).toBeVisible();
+  for(const value of ['Testgutschein','TEST-PORTAL-100','Rechnungsstraße'])await expect(chefCard.getByText(value,{exact:true}).first()).toBeVisible();
   await chefCard.getByText('Alle Bestellangaben',{exact:true}).click();
   await nav(chef.page,'Kunden');
   const search=chef.page.getByRole('searchbox',{name:'Kunden suchen',exact:true});
@@ -150,6 +151,30 @@ try {
   await expect(driver.page.getByText('Bestellte Artikel',{exact:true})).toHaveCount(0);
   await expect(driver.page.getByText('Alle Bestellangaben',{exact:true})).toHaveCount(0);
   console.log('PASS role-specific order details in queue, tour and receipts, navigation, immediate claiming and chef-only assignment board.');
+  await nav(driver.page,'Bestellungen');
+  for(const place of [false,true]) {
+    const uber={OrderList:{CreateDateTime:new Date().toISOString(),Order:{OrderID:'UBER-UI-'+place,StoreData:{StoreId:'1'},
+      Customer:{DeliveryAddress:{FirstName:'A.',LastName:'Test',Street:place?'Places-ID: ChIJExamplePlace123':'Uberstraße',...(place?{}:{HouseNo:'12',City:'81249 München, Deutschland'}),PhoneNo:'--',AddAddress:'2. Etage'}},
+      AddInfo:{PaymentType:'UberEats Onlinezahlung',Total:'25.50'},
+      ArticleList:{Article:[{Count:'1',Price:'0',Comment:'Bitte kurz klingeln'},{Count:'1',Price:'0',Comment:'Deine Bestellnummer: AB123'},{Count:'1',Price:'0',Comment:'Tel. +49 32 211076159 (123 45 678)'}]}}}};
+    const sent=await fetch(base+'/sendorder',{method:'POST',headers:{authorization:'Basic '+Buffer.from(credentials.username+':'+credentials.password).toString('base64')},body:JSON.stringify(uber)});
+    expect(sent.status).toBe(200);await sent.json();
+    const uberCard=driver.page.locator('.order-queue-card').filter({has:driver.page.getByRole('heading',{name:place?'Places-ID: ChIJExamplePlace123':'Uberstraße 12',exact:true})});
+    await expect(uberCard.getByRole('link',{name:'Anrufen: +49 32 211076159',exact:true})).toBeVisible();
+    await expect(uberCard.getByText('AB123',{exact:true})).toBeVisible();
+    await expect(uberCard).toContainText('Bitte kurz klingeln');await expect(uberCard).toContainText('Telefon-Zugangscode: 123 45 678');
+    const map=new URL(await uberCard.getByRole('link',{name:'Google Maps öffnen',exact:true}).getAttribute('href'));
+    if(place) {
+      expect(map.searchParams.get('destination_place_id')).toBe('ChIJExamplePlace123');
+      await expect(uberCard.getByRole('link',{name:'Waze öffnen',exact:true})).toHaveCount(0);
+      await uberCard.screenshot({path:tmpdir()+'/jeffreyys-uber-place-mobile.png'});
+    } else {
+      await expect(uberCard).toContainText('81249 München');
+      expect(map.searchParams.get('destination')).toBe('Uberstraße 12, 81249 München');
+    }
+    await fits(driver.page);
+  }
+  console.log('PASS Uber PLZ, portal reference, masked telephone/access code, notes and Places-ID navigation on mobile.');
   if(errors.length)throw new Error(errors.join('\n'));
 } finally {
   await browser?.close();server.closeAllConnections();await new Promise(r=>server.close(r));
