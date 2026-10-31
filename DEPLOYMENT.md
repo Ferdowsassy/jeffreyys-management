@@ -30,6 +30,30 @@ Use `HTTPS_BEHIND_PROXY=true` only when the app is reachable exclusively through
 
 For a new empty database, set `BOOTSTRAP_NAME` and `BOOTSTRAP_PIN_FILE` to a private file containing an 8–12 digit PIN. Existing MySQL databases never read or reapply this secret. `DB_CONFIG_FILE` optionally loads database settings from a mode-0600 environment file outside the application/public directory.
 
+## Demo deployment
+
+Use a **separate** Hostinger website (free subdomain or dedicated hostname). Never point `DEMO_MODE=true` at the live restaurant database or `jeffreys-burger.app`.
+
+Demo hosting keeps production HTTPS, secure cookies and the same Node entrypoint (`hostinger.cjs`), but seeds the public demo accounts from `server/README.md` on an empty store and allows chef `reset` / `clearDemo`.
+
+```dotenv
+NODE_ENV=production
+APP_ORIGIN=https://YOUR-DEMO-HOST
+COOKIE_SECURE=true
+DEMO_MODE=true
+HTTPS_BEHIND_PROXY=true
+HOST=127.0.0.1
+PORT=3000
+STORAGE_BACKEND=mysql
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=YOUR_DEMO_DATABASE
+DB_USER=YOUR_DEMO_DATABASE_USER
+DB_PASSWORD="YOUR_DEMO_DATABASE_PASSWORD"
+```
+
+Omit `BOOTSTRAP_NAME` / `BOOTSTRAP_PIN_FILE` for demo mode. An empty MySQL database is seeded automatically; an already-initialized database is reused as-is. Record the demo target in `.hostinger/site.json` with `"mode": "demo"` so later deploys do not overwrite production.
+
 ## Migrate existing records
 
 1. Stop requests to the old application and verify no process can write the old store.

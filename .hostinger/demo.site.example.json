@@ -1,0 +1,9 @@
+{
+  "domain": "REPLACE-WITH-DEMO-HOST",
+  "username": "REPLACE-WITH-HOSTINGER-USERNAME",
+  "type": "nodejs",
+  "mode": "demo",
+  "entryFile": "hostinger.cjs",
+  "buildScript": "build",
+  "nodeVersion": 22
+}
