@@ -32,8 +32,8 @@ export async function createApp({
   secureCookie = production, assumeHttps = false, staticDir, aiFetch = fetch, routingFetch = fetch, receiptMapsFetch = fetch,
   winorder = winorderCredentials(),
 } = {}) {
-  if (production && (!secureCookie || !origin || new URL(origin).protocol !== "https:"))
-    throw new Error("Production requires HTTPS APP_ORIGIN and secure cookies");
+  if (production && (demo || !secureCookie || !origin || new URL(origin).protocol !== "https:"))
+    throw new Error("Production requires HTTPS APP_ORIGIN, secure cookies and DEMO_MODE=false");
   if (origin && new URL(origin).origin !== origin) throw new Error("APP_ORIGIN must be an exact origin without a path");
   if (trustProxy === true || typeof trustProxy === "number") throw new Error("Trust only explicit proxy IPs/subnets, never all proxies or hop counts");
   if (assumeHttps && (!production || !origin || new URL(origin).protocol !== "https:"))

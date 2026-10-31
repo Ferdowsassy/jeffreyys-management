@@ -1,9 +1,0 @@
-{
-  "domain": "jeffreys-burger.app",
-  "username": "u678525276",
-  "type": "nodejs",
-  "mode": "production",
-  "entryFile": "hostinger.cjs",
-  "buildScript": "build",
-  "nodeVersion": 22
-}

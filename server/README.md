@@ -20,7 +20,7 @@ First run seeds clearly marked demo records with Munich-calendar dates and relat
 | leo | Leo | driver | 3456 |
 | mia | Mia | driver | 4567 |
 
-These are **public demo credentials**, not production secrets. Real restaurant hosting keeps `DEMO_MODE=false` and requires an explicit bootstrap owner. A separate HTTPS demo deployment may set `DEMO_MODE=true` to seed these accounts; see [DEPLOYMENT.md](../DEPLOYMENT.md). Employee PINs are 4–12 digits; the initial bootstrap owner uses 8–12 digits. PINs are persisted as salted scrypt hashes and never returned by an endpoint. Never use demo mode with real information.
+These are **public demo credentials**, not production secrets. Production starts with demo mode disabled, requires an explicit bootstrap owner, and accepts 4–12 digit employee PINs; the initial bootstrap owner uses 8–12 digits. PINs are persisted as salted scrypt hashes and never returned by an endpoint. Never use demo mode with real information.
 
 Production serves the built client and API only behind a configured HTTPS proxy; direct non-health HTTP requests receive 426. Sessions are random 256-bit tokens in an HttpOnly, Secure, SameSite=Strict cookie in production, with a 12-hour expiry. They are memory-only and disappear on restart. Login is limited to 20 attempts per IP per 15 minutes; AI to 10 calls per employee per minute. Foreign POST origins are rejected, and role/active status is rechecked on every request and queued transaction.
 
