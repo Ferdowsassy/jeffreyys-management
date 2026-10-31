@@ -62,7 +62,7 @@ for configuration and the one-way synchronization boundaries.
 
 ## Security defaults
 
-Production refuses to start unless it has an HTTPS `APP_ORIGIN`, secure cookies, demo mode disabled, complete MySQL credentials (or an explicit absolute `DATA_FILE` for legacy deployments), and an explicit initial owner name/PIN when creating a new store. Employee PINs are 4–12 digits; the initial bootstrap owner PIN remains 8–12 digits. The bootstrap PIN is read from a file rather than an environment variable. Session cookies are HttpOnly, Secure, and SameSite=Strict.
+Production refuses to start unless it has an HTTPS `APP_ORIGIN`, secure cookies, complete MySQL credentials (or an explicit absolute `DATA_FILE` for legacy deployments), and — when `DEMO_MODE` is not `true` — an explicit initial owner name/PIN when creating a new store. Hosted demos may set `DEMO_MODE=true` on a separate HTTPS origin; never use demo mode with real restaurant data. Employee PINs are 4–12 digits; the initial bootstrap owner PIN remains 8–12 digits. The bootstrap PIN is read from a file rather than an environment variable. Session cookies are HttpOnly, Secure, and SameSite=Strict.
 
 Receipt scanning runs on the device using self-hosted Tesseract OCR and deterministic parsing. It extracts a draft for review; photos are never uploaded by the scanner. German and English OCR assets are generated during `npm run build`. The optional coach requires a backend `OPENAI_API_KEY`.
 
