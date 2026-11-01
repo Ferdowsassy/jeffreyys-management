@@ -60,10 +60,46 @@ export function OrderQueue({user, data, act}) {
     </div>
     {!orders.length && <Empty>{allOrders.length?'Keine Treffer. Suche oder Zahlungsfilter ändern.':'Keine verfügbaren Bestellungen. Neue Lieferungen erscheinen hier automatisch.'}</Empty>}
     {chef && <DeliveryBoard data={data} user={user} act={act} />}
+    {chef && <CompletedOrderReturns data={data} act={act} />}
     {chef && assigned.length>0 && <details className="order-reassignment"><summary>Fahrer ändern · {assigned.length} offene Lieferungen</summary><Panel title="Offene Lieferungen zuordnen">
       <div className="table-wrap"><table><thead><tr><th>Bestellung</th><th>Adresse</th><th>Aktueller Fahrer</th><th>Neu zuordnen</th></tr></thead><tbody>{assigned.map(o=><tr key={o.id}><td>{o.orderNumber}</td><td>{o.address}{o.source==='winorder' && <details><summary>Bestelldetails</summary><OrderDetails order={o} /><div className="row"><NavigationLinks order={o} /></div></details>}</td><td>{data.employees.find(e=>e.id===o.employeeId)?.name || '—'}</td><td><form className="order-claim" onSubmit={async e=>{e.preventDefault();setBusy(true);try{await act('assignOrder',{id:o.id,employeeId:drivers[o.id] || o.employeeId});}catch{}finally{setBusy(false);}}}><select aria-label={'Neuer Fahrer für '+o.orderNumber} value={drivers[o.id] || o.employeeId} onChange={e=>setDrivers({...drivers,[o.id]:e.target.value})}>{!onDuty.some(e=>e.id===o.employeeId) && <option value={o.employeeId}>Bitte wählen</option>}{onDuty.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select><button className="secondary" disabled={busy || !onDuty.length || !drivers[o.id] || drivers[o.id]===o.employeeId}>Zuordnen</button></form></td></tr>)}</tbody></table></div>{!assigned.length && <Empty>Keine offenen Lieferungen.</Empty>}
     </Panel></details>}
   </>;
+}
+
+function CompletedOrderReturns({data, act}) {
+  const [employeeId,setEmployeeId]=useState('all'), [query,setQuery]=useState(''), [busy,setBusy]=useState(false);
+  const completed=data.orders.filter(order=>order.status==='delivered');
+  const search=query.trim().toLocaleLowerCase('de-DE');
+  const orders=completed.filter(order=>(employeeId==='all' || order.employeeId===employeeId) &&
+    [order.orderNumber,order.address,order.customerName].filter(Boolean).join(' ').toLocaleLowerCase('de-DE').includes(search))
+    .sort((a,b)=>(b.deliveredAt || b.createdAt).localeCompare(a.deliveredAt || a.createdAt));
+  async function returnOrder(order) {
+    const name=data.employees.find(employee=>employee.id===order.employeeId)?.name || 'bisherigen Fahrer';
+    if (!confirm(`Bestellung ${order.orderNumber} von ${name} zurückholen? Sie wird wieder verfügbar. Liefergeld, Trinkgeld und Bargeldabzug werden aus der bisherigen Fahrerabrechnung entfernt.`)) return;
+    setBusy(true);
+    try {await act('returnDeliveredOrder',{id:order.id});} catch {} finally {setBusy(false);}
+  }
+  return <details className="completed-order-returns">
+    <summary>Zugestellte Bestellungen zurückholen · {completed.length}</summary>
+    <Panel title="Zugestellte Bestellungen" subtitle="Bestellungen aller Mitarbeiter zurück in die verfügbaren Bestellungen verschieben. Auch frühere und abgeschlossene Schichten sind enthalten.">
+      <p className="notice">Die Fahrerzuordnung wird aufgehoben. Liefergeld, Trinkgeld und Bargeldabzug zählen erst nach erneuter Zustellung wieder zur Fahrerabrechnung. Bereits erfasste Auszahlungen bleiben bestehen.</p>
+      <div className="toolbar order-filters">
+        <label>Mitarbeiter filtern<select value={employeeId} onChange={event=>setEmployeeId(event.target.value)}>
+          <option value="all">Alle Mitarbeiter</option>
+          {data.employees.filter(employee=>completed.some(order=>order.employeeId===employee.id)).map(employee=><option key={employee.id} value={employee.id}>{employee.name}</option>)}
+        </select></label>
+        <label>Zugestellte Bestellung suchen<input type="search" placeholder="Bestellnummer, Adresse oder Name" value={query} onChange={event=>setQuery(event.target.value)} /></label>
+        <span role="status">{orders.length} von {completed.length} zugestellten Bestellungen</span>
+      </div>
+      <div className="delivery-grid">{orders.map(order=><Panel key={order.id} title={'Bestellung '+orderReference(order.orderNumber)} subtitle={data.employees.find(employee=>employee.id===order.employeeId)?.name || 'Nicht zugeordnet'}>
+        <p>{order.noAddress ? 'Ohne Adresse · Pauschale' : order.address}</p>
+        <p>{new Date(order.deliveredAt || order.createdAt).toLocaleString('de-DE',{timeZone:'Europe/Berlin'})} · {euro(order.amount)}</p>
+        <button className="secondary" disabled={busy} onClick={()=>returnOrder(order)}>Zurück zu verfügbaren Bestellungen</button>
+      </Panel>)}</div>
+      {!orders.length && <Empty>{completed.length ? 'Keine passenden zugestellten Bestellungen.' : 'Keine zugestellten Bestellungen.'}</Empty>}
+    </Panel>
+  </details>;
 }
 
 export function WinOrderSettings({data}) {
