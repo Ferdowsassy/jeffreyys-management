@@ -190,7 +190,7 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
     fail("Action type required");
   const now = new Date().toISOString(),
     id = randomUUID();
-  let result = null;
+  let result = null, auditDetails = {};
   const employee = () => lookup(s.employees, user.id);
   switch (p.type) {
     case "clockIn": {
@@ -308,7 +308,19 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
       if (!shift) fail('Bitte zuerst einstempeln, um eine Bestellung zu übernehmen.', 409);
       const zone = s.zones.find(z => z.postalCode === result.postalCode);
       Object.assign(result, {employeeId:driverId, shiftId:shift.id, status:'open', claimedAt:now,
-        deliveryFee:zone ? rate(zone.feeHistory || [], today(), 'fee', zone.fee) : 0});
+        deliveryFee:result.noAddress ? (s.settings.flatFee ?? 0) : zone ? rate(zone.feeHistory || [], today(), 'fee', zone.fee) : 0});
+      break;
+    }
+    case "returnDeliveredOrder": {
+      requireRole(user, 'chef');
+      result = lookup(s.orders, p.id);
+      if (result.status !== 'delivered') fail('Nur zugestellte Bestellungen können zurückgeholt werden.', 409);
+      auditDetails = {previousEmployeeId:result.employeeId, previousShiftId:result.shiftId, previousDeliveredAt:result.deliveredAt};
+      Object.assign(result, {employeeId:null, shiftId:null, status:'available', deliveredAt:null, deliveryFee:0});
+      delete result.claimedAt;
+      delete result.completionSource;
+      delete result.assignedAt;
+      delete result.assignedBy;
       break;
     }
     case "releaseOrder": {
@@ -767,6 +779,7 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
   }
   if (["saveLocation", "stopLocation", "saveDriverFuel", "deleteDriverFuel"].includes(p.type)) return result;
   s.audit.push({
+    ...auditDetails,
     id: randomUUID(),
     type: p.type,
     employeeId: user.id,

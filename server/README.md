@@ -83,6 +83,7 @@ Employees optionally have `phone` (up to 40 characters). Orders optionally have 
 | clockOut | No fields required | Own shift; automatically delivers open orders; cash retained and deducted from payout |
 | addOrder | `address,postalCode,city,amount,payment,orderNumber,noAddress?:boolean,employeeId?:string` | Driver/chef; must have active shift; chef may choose employee; snapshots delivery fee |
 | delivered | `id` | Driver's own order or chef; idempotent |
+| returnDeliveredOrder | `id` | Chef only; moves any delivered order back to the shared available queue, clears driver/shift/claim/completion and fee, and audits the previous assignment. Recalculates driver payroll; recorded salary payments remain unchanged. |
 | addTask | `text,visibility?:'team'|'chef'` | Kitchen/chef; only chefs may create chef-only tasks |
 | toggleTask | `id` | Kitchen/chef |
 | saveEmployee | `id?,name,role,pin?,hourlyRate,effectiveDate?` | Chef; PIN required when creating; effective date defaults to Munich today; keeps last active chef |
