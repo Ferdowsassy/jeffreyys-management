@@ -1,6 +1,7 @@
 import React, {useEffect, useState} from 'react';
 import {Panel} from './main';
 import {euro, formatHours} from './finance';
+import {orderReference} from './customer-info';
 import {berlinDate, shiftDate, dailyEarnings} from '../shared/daily-stats';
 
 const weekday = date => new Date(date+'T12:00:00Z').toLocaleDateString('de-DE',{weekday:'short',timeZone:'Europe/Berlin'});
@@ -49,6 +50,15 @@ export default function EarningsWeek({user, data, date, onDateChange}) {
       <h3>{weekday(current)}, {shortDate(current)} · {euro(chosen.totalEarnings)}{chosen.provisional && <small> · Vorläufig</small>}</h3>
       <dl><div><dt>Arbeitszeit</dt><dd>{formatHours(chosen.hours)}</dd></div><div><dt>Lohn</dt><dd>{euro(chosen.wages)}</dd></div><div><dt>Liefergeld</dt><dd>{euro(chosen.fees)}</dd></div>{(chosen.onlineTips>0 || chosen.cashTips>0) && <><div><dt>Online-Trinkgeld</dt><dd>{euro(chosen.onlineTips)}</dd></div><div><dt>Bar-Trinkgeld (erhalten)</dt><dd>{euro(chosen.cashTips)}</dd></div></>}</dl>
       {chosen.totalEarnings===0 && <p className="muted">Für diesen Tag ist noch kein Verdienst erfasst.</p>}
+      {chosen.paidOrders.length>0 && <>
+        <h4>Liefergeld pro Bestellung</h4>
+        <ul className="earnings-orders" role="list">
+          {chosen.paidOrders.map(order=><li key={order.id}>
+            <span title={order.orderNumber}>Bestellung {orderReference(order.orderNumber)}</span>
+            <strong>{euro(order.deliveryFee)}</strong>
+          </li>)}
+        </ul>
+      </>}
     </div>
     <details className="earnings-help"><summary>Wie wird der Verdienst berechnet?</summary><p>Lohn + Liefergeld + Trinkgeld zugestellter Bestellungen, vor Bargeldabzug. Online-Trinkgeld erhöht die Auszahlung; Bar-Trinkgeld ist bereits erhalten. Die gesamte Schicht zählt zum Tag des Einstempelns in Berlin, auch nach Mitternacht. Zugeordnete Lieferungen zählen zum selben Schichttag. Laufende Schichten sind vorläufig; die Auszahlung findest du in der Monatsabrechnung.</p></details>
     </div>

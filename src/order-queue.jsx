@@ -40,7 +40,7 @@ export function OrderQueue({user, data, act}) {
         <OrderDetails order={order} role={user.role} showPayment={false} />
         {canClaim && <div className="row navigation-actions"><NavigationLinks order={order} /></div>}
         {editing === order.id && chef ? <Form initial={{...order,amount:order.amount ?? '',payment:order.payment || ''}}
-          fields={[{name:'address',label:'Straße & Hausnummer'}, {name:'postalCode',label:'PLZ',pattern:'[0-9]{5}'}, {name:'city',label:'Ort'},
+          fields={[{name:'address',label:'Straße & Hausnummer',required:false}, {name:'postalCode',label:'PLZ',pattern:'[0-9]{5}'}, {name:'city',label:'Ort',required:false},
             {name:'amount',label:'Gesamtbetrag (€)',type:'number',min:0,step:'0.01'},
             {name:'payment',label:'Zahlungsart',options:[{value:'',label:'Bitte wählen'},{value:'cash',label:'Bar kassieren'},{value:'online',label:'Bereits bezahlt'}]}]}
           submit="Angaben speichern" onSubmit={async v => {
@@ -93,7 +93,7 @@ function CompletedOrderReturns({data, act}) {
         <span role="status">{orders.length} von {completed.length} zugestellten Bestellungen</span>
       </div>
       <div className="delivery-grid">{orders.map(order=><Panel key={order.id} title={'Bestellung '+orderReference(order.orderNumber)} subtitle={data.employees.find(employee=>employee.id===order.employeeId)?.name || 'Nicht zugeordnet'}>
-        <p>{order.noAddress ? 'Ohne Adresse · Pauschale' : order.address}</p>
+        <p>{order.noAddress ? 'Ohne Adresse · '+(order.postalCode ? 'PLZ '+order.postalCode : 'Pauschale') : order.address}</p>
         <p>{new Date(order.deliveredAt || order.createdAt).toLocaleString('de-DE',{timeZone:'Europe/Berlin'})} · {euro(order.amount)}</p>
         <button className="secondary" disabled={busy} onClick={()=>returnOrder(order)}>Zurück zu verfügbaren Bestellungen</button>
       </Panel>)}</div>

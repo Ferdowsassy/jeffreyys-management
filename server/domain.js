@@ -18,6 +18,8 @@ const text = (value, label, max = 200) => {
     fail(`Invalid ${label}`);
   return value.trim();
 };
+const optionalText = (value, label, max) =>
+  typeof value === 'string' && !value.trim() ? '' : text(value, label, max);
 const number = (value, label, min = 0, max = 100000) => {
   if (
     typeof value !== "number" ||
@@ -79,6 +81,11 @@ const rate = (history, date, key, fallback) =>
     .filter((x) => x.effectiveDate <= date)
     .sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))[0]?.[key] ??
   fallback;
+const deliveryFeeFor = (state, order, date) => {
+  if (!order.postalCode) return order.noAddress ? (state.settings.flatFee ?? 0) : 0;
+  const zone = state.zones.find(z => z.postalCode === order.postalCode);
+  return zone ? rate(zone.feeHistory || [], date, 'fee', zone.fee) : 0;
+};
 const owned = (record, user) => {
   if (user.role !== "chef" && record.employeeId !== user.id)
     fail("Not your record", 403);
@@ -306,9 +313,8 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
       if (!driver.active || driver.role !== 'driver') fail('Bitte einen aktiven Fahrer wählen.', 409);
       const shift = s.shifts.find(x => x.employeeId === driverId && !x.end);
       if (!shift) fail('Bitte zuerst einstempeln, um eine Bestellung zu übernehmen.', 409);
-      const zone = s.zones.find(z => z.postalCode === result.postalCode);
       Object.assign(result, {employeeId:driverId, shiftId:shift.id, status:'open', claimedAt:now,
-        deliveryFee:result.noAddress ? (s.settings.flatFee ?? 0) : zone ? rate(zone.feeHistory || [], today(), 'fee', zone.fee) : 0});
+        deliveryFee:deliveryFeeFor(s, result, today())});
       break;
     }
     case "returnDeliveredOrder": {
@@ -340,7 +346,11 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
       if (!['cash','online'].includes(p.payment)) fail('Bitte die Zahlungsart bestätigen.');
       const postalCode = text(p.postalCode, 'PLZ', 5);
       if (!/^\d{5}$/.test(postalCode)) fail('Bitte eine fünfstellige PLZ angeben.');
-      Object.assign(result, {address:text(p.address, 'Adresse'), postalCode, city:text(p.city, 'Ort', 100),
+      const deliveryFee = result.employeeId && postalCode !== result.postalCode
+        ? deliveryFeeFor(s, {postalCode}, berlinDate(result.claimedAt || now))
+        : result.deliveryFee;
+      Object.assign(result, {address:optionalText(p.address ?? result.address ?? '', 'Adresse'), postalCode,
+        city:optionalText(p.city ?? result.city ?? '', 'Ort', 100), deliveryFee,
         amount:money(p.amount, 'Betrag'), payment:p.payment,
         tipOnline:money(p.tipOnline ?? result.tipOnline ?? 0, 'Online-Trinkgeld'),
         tipCash:money(p.tipCash ?? result.tipCash ?? 0, 'Bar-Trinkgeld'), reviewIssues:[], status:result.employeeId ? 'open' : 'available', reviewedAt:now, reviewedBy:user.id});
@@ -359,8 +369,10 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
       if (p.noAddress !== undefined && typeof p.noAddress !== "boolean")
         fail("Invalid noAddress");
       const noAddress = p.noAddress === true;
-      const postalCode = noAddress ? "" : text(p.postalCode, "postal code", 5);
-      if (!noAddress && !/^\d{5}$/.test(postalCode))
+      const postalCode = noAddress
+        ? optionalText(p.postalCode ?? "", "postal code", 5)
+        : text(p.postalCode, "postal code", 5);
+      if (postalCode && !/^\d{5}$/.test(postalCode))
         fail("Postal code must be five digits");
       const orderNumber = text(p.orderNumber, "order number", 60);
       if (
@@ -371,7 +383,6 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
         )
       )
         fail("Order number already exists today", 409);
-      const zone = s.zones.find((z) => z.postalCode === postalCode);
       result = {
         id,
         employeeId,
@@ -385,9 +396,7 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
         status: "open",
         createdAt: now,
         deliveredAt: null,
-        deliveryFee: noAddress ? (s.settings.flatFee ?? 0) : zone
-          ? rate(zone.feeHistory || [], today(), "fee", zone.fee)
-          : 0,
+        deliveryFee: deliveryFeeFor(s, {postalCode, noAddress}, today()),
         tipOnline: driver.role === "driver" ? money(p.tipOnline ?? 0, "Online-Trinkgeld") : 0,
         tipCash: driver.role === "driver" ? money(p.tipCash ?? 0, "Bar-Trinkgeld") : 0,
         items: orderItems(p.items),

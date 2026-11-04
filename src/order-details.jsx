@@ -80,7 +80,7 @@ export function OrderDetails({order,act,canCorrect=false,role='chef',showPayment
     {order.reviewIssues?.length>0 && <div className="notice">{order.reviewIssues.join(' · ')}</div>}
     {canCorrect && act && order.reviewIssues?.length>0 && <details><summary>Angaben ergänzen</summary>
       <Form initial={{...order,amount:order.amount ?? '',payment:order.payment || '',tipOnline:order.tipOnline || 0,tipCash:order.tipCash || 0}}
-        fields={[{name:'address',label:'Straße & Hausnummer'},{name:'postalCode',label:'PLZ',pattern:'[0-9]{5}'},{name:'city',label:'Ort'},
+        fields={[{name:'address',label:'Straße & Hausnummer',required:false},{name:'postalCode',label:'PLZ',pattern:'[0-9]{5}'},{name:'city',label:'Ort',required:false},
           {name:'amount',label:'Bestellbetrag ohne Trinkgeld (€)',type:'number',min:0,step:0.01},
           ...(role==='chef' ? [{name:'tipOnline',label:'Online-Trinkgeld (€)',type:'number',min:0,step:0.01},
           {name:'tipCash',label:'Bar-Trinkgeld (€)',type:'number',min:0,step:0.01}] : []),

@@ -68,6 +68,33 @@ test('receiver resolves Places IDs with the saved chef key and preserves import 
   assert.equal(order.postalCode,'81249');assert.equal(order.payment,'online');assert.equal(calls,2);
 });
 
+test('a claimed Uber Eats order with no street gets the delivery zone fee when the driver adds its PLZ',async t=>{
+  const {app,request,login}=await fixture(t);
+  const input=sample({place:true});
+  delete input.OrderList.Order.Customer.DeliveryAddress.Street;
+  await app.locals.store.transact(s=>importWinorder(s,parse(input)));
+  const {id}=app.locals.store.read().orders.find(o=>o.orderNumber==='UBER-TEST');
+  const driver=await login('leo','3456');
+  const act=body=>request('/api/action',{id,...body},driver);
+  assert.equal((await act({type:'claimOrder'})).status,200);
+  const readOrder=()=>app.locals.store.read().orders.find(o=>o.id===id);
+  assert.equal(readOrder().deliveryFee,0);
+
+  const review={type:'reviewImportedOrder',address:'',city:'',postalCode:'80802',amount:31.21,payment:'online'};
+  assert.equal((await act(review)).status,200);
+  assert.equal(readOrder().address,'');
+  assert.equal(readOrder().city,'');
+  assert.equal(readOrder().postalCode,'80802');
+  assert.equal(readOrder().deliveryFee,2.5);
+  assert.equal(readOrder().tipOnline,5);
+
+  const chef=await login('alex','1234');
+  assert.equal((await request('/api/action',{type:'saveZone',id:'demo-zone-1',postalCode:'80802',name:'Schwabing',fee:4},chef)).status,200);
+  assert.equal((await act({...review,amount:32})).status,200);
+  assert.equal((await act({type:'delivered'})).status,200);
+  assert.equal(readOrder().deliveryFee,2.5);
+});
+
 test('existing-record repair fills missing fields without changing reviewed data or historical accounting',()=>{
   const [parsed]=parse(sample());
   const legacy={...parsed,status:'open',postalCode:'',city:'81249 München, Deutschland',payment:null,amount:36.21,tipOnline:0,customerPhone:'--',deliveryNotes:'2. Etage',deliveryFee:0,reviewIssues:['Lieferart prüfen','Lieferadresse ergänzen','Zahlungsart prüfen','Trinkgeld prüfen']};

@@ -194,7 +194,7 @@ function OrderTable({ orders, data }) {
       ]}
       rows={orders.map((o) => [
         <span title={o.orderNumber}>{orderReference(o.orderNumber)}</span>,
-        o.noAddress ? "Ohne Adresse · Pauschale" : <>{o.address}{o.source==='winorder' && <details><summary>Bestelldetails</summary><OrderDetails order={o} role="driver" /><div className="row navigation-actions"><NavigationLinks order={o} /></div></details>}</>,
+        o.noAddress ? "Ohne Adresse · "+(o.postalCode ? "PLZ "+o.postalCode : "Pauschale") : <>{o.address}{o.source==='winorder' && <details><summary>Bestelldetails</summary><OrderDetails order={o} role="driver" /><div className="row navigation-actions"><NavigationLinks order={o} /></div></details>}</>,
         person(data, o.employeeId),
         euro(o.amount),
         o.payment === "cash" ? "Bar" : "Online",
@@ -386,7 +386,7 @@ export function Management({ user, data, page, act, notify, onAccess }) {
         </Panel>
         <Panel
           title="Ohne Kundenadresse"
-          subtitle="Belege ohne Adresse nutzen diese Pauschale, nicht den PLZ-Tarif."
+          subtitle="Die Pauschale gilt für Belege ohne Adresse und ohne PLZ."
         >
           <Form
             fields={[
@@ -656,7 +656,7 @@ export function Driver({ user, data, page, act, notify, go }) {
       label: "Adressart",
       options: [
         { value: "false", label: "Mit Kundenadresse" },
-        { value: "true", label: "Ohne Adresse / Uber-Pauschale" },
+        { value: "true", label: "Ohne Adresse (PLZ, falls bekannt)" },
       ],
     },
   ];

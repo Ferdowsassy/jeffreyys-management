@@ -4,6 +4,7 @@ import {tmpdir} from 'node:os';
 import {resolve} from 'node:path';
 import express from 'express';
 import {createApp} from '../server/app.js';
+import {orderWorkDate,shiftsById} from '../shared/daily-stats.js';
 
 const dir=await mkdtemp(tmpdir()+'/jeffreyys-order-payments-');
 const credentials={username:'test-winorder',password:'isolated-ui-winorder-password-123456'};
@@ -175,6 +176,23 @@ try {
     await fits(driver.page);
   }
   console.log('PASS Uber PLZ, portal reference, masked telephone/access code, notes and Places-ID navigation on mobile.');
+  const placeCard=driver.page.locator('.order-queue-card').filter({hasText:'Bestellung UBER-UI-true'});
+  await placeCard.getByRole('button',{name:'Übernehmen',exact:true}).click();
+  await nav(driver.page,'Tour');
+  const delivery=driver.page.locator('.delivery-card').filter({hasText:'Bestellung UBER-UI-true'});
+  await delivery.getByText('Angaben ergänzen',{exact:true}).click();
+  await delivery.getByLabel('PLZ',{exact:true}).fill('80802');
+  await delivery.getByRole('button',{name:'Angaben speichern',exact:true}).click();
+  await expect(delivery).toContainText(/Liefergeld\s+2,50/);
+  await delivery.getByRole('button',{name:'Zugestellt',exact:true}).click();
+  await expect(delivery).toHaveCount(0);
+  await nav(driver.page,'Verdienst');
+  const {orders,shifts}=app.locals.store.read();
+  const order=orders.find(o=>o.orderNumber==='UBER-UI-true');
+  await driver.page.getByLabel('Verdiensttag',{exact:true}).fill(orderWorkDate(order,shiftsById(shifts)));
+  await expect(driver.page.locator('.earnings-orders li').filter({hasText:'Bestellung UBER-UI-true'})).toContainText('2,50');
+  await fits(driver.page);
+  console.log('PASS a driver can add a PLZ to an Uber order and see its Liefergeld in Verdienst on mobile.');
   if(errors.length)throw new Error(errors.join('\n'));
 } finally {
   await browser?.close();server.closeAllConnections();await new Promise(r=>server.close(r));

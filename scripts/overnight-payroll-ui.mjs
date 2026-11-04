@@ -28,6 +28,12 @@ try {
       await page.getByLabel('Verdiensttag',{exact:true}).fill(date);
       await expect(page.locator('.earnings-detail')).toContainText(hours);
       await expect(page.locator('.earnings-detail')).toContainText(value);
+      const deliveries=page.locator('.earnings-orders li');
+      if(name==='Leo' && date==='2026-09-30') {
+        await expect(deliveries).toHaveCount(1);
+        await expect(deliveries).toContainText('Bestellung NIGHT-1');
+        await expect(deliveries).toContainText('2,50');
+      } else await expect(deliveries).toHaveCount(0);
     }
     for(const [month,hours,value] of [['2026-09','4 Std. 00 Min.',amount],['2026-10','0 Std. 00 Min.','0,00']]) {
       await page.getByLabel('Abrechnungsmonat',{exact:true}).fill(month);

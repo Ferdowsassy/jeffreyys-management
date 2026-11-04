@@ -1,6 +1,24 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fixture } from "./test-helper.js";
+test("a manual receipt without an address uses its PLZ, or the flat fee when no PLZ is supplied", async (t) => {
+  const {app, request, login} = await fixture(t);
+  const driver = await login("leo", "3456");
+  const chef = await login("alex", "1234");
+  assert.equal((await request('/api/action',{type:'saveSettings',flatFee:3.25},chef)).status,200);
+  const addReceipt = (orderNumber, postalCode) => request('/api/action',{
+    type:'addOrder',orderNumber,postalCode,noAddress:true,amount:15,payment:'online',
+  },driver);
+  for (const [orderNumber,postalCode,fee] of [['ZIP-ONLY','80802',2.5],['NO-ZIP','',3.25],['UNKNOWN-ZIP','99999',0]]) {
+    assert.equal((await addReceipt(orderNumber,postalCode)).status,200);
+    const order=app.locals.store.read().orders.find(o=>o.orderNumber===orderNumber);
+    assert.equal(order.address,'');
+    assert.equal(order.postalCode,postalCode);
+    assert.equal(order.deliveryFee,fee);
+  }
+  assert.equal((await addReceipt('INVALID-ZIP','abcde')).status,400);
+});
+
 test("driver cash is deducted automatically without handoffs or chef approval", async (t) => {
   const { request, login } = await fixture(t);
   const driver = await login("leo", "3456"),
