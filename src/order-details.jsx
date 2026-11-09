@@ -104,7 +104,7 @@ export function DeliveryBoard({data,user,act}) {
       <h3>{order.driverName}</h3>
       <p><strong>{order.status==='delivered' ? 'Zugestellt' : 'Unterwegs / übernommen'}</strong>{order.claimedAt ? ' · '+new Date(order.claimedAt).toLocaleTimeString('de-DE',{timeZone:'Europe/Berlin',hour:'2-digit',minute:'2-digit'}) : ''}</p>
       <p>{order.address} · {order.postalCode} {order.city}</p>
-      <p className="order-reference" title={order.orderNumber}>Bestellung {orderReference(order.orderNumber)}</p>
+      <p className="order-reference" title={order.orderNumber}>Bestellung {orderReference(order)}</p>
       <details><summary>Bestelldetails</summary><OrderDetails order={order} act={act} canCorrect={order.status==='open' && (user.role==='chef' || user.id===order.employeeId)} /><div className="order-contact-actions"><NavigationLinks order={order} /></div></details>
     </article>)}</div>}
   </section>;

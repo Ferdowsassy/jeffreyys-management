@@ -19,7 +19,9 @@ export function customerInfo(order) {
 }
 
 export function orderReference(value) {
-  const number=text(value);
+  const number=value && typeof value==='object'
+    ? winorderFields(value.winorderDetails).providerReference || text(value.orderNumber)
+    : text(value);
   if (/^\{?[0-9a-f]{8}-[0-9a-f-]{27}\}?$/i.test(number)) return number.replace(/[{}]/g,'').slice(0,8);
   return number.length>24 ? number.slice(0,16)+'…'+number.slice(-4) : number || '—';
 }

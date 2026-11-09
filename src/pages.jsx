@@ -193,7 +193,7 @@ function OrderTable({ orders, data }) {
         "Status",
       ]}
       rows={orders.map((o) => [
-        <span title={o.orderNumber}>{orderReference(o.orderNumber)}</span>,
+        <span title={o.orderNumber}>{orderReference(o)}</span>,
         o.noAddress ? "Ohne Adresse · "+(o.postalCode ? "PLZ "+o.postalCode : "Pauschale") : <>{o.address}{o.source==='winorder' && <details><summary>Bestelldetails</summary><OrderDetails order={o} role="driver" /><div className="row navigation-actions"><NavigationLinks order={o} /></div></details>}</>,
         person(data, o.employeeId),
         euro(o.amount),
@@ -825,7 +825,7 @@ export function Driver({ user, data, page, act, notify, go }) {
                 <div className="delivery-amount">
                   {o.amount===null ? 'Betrag fehlt' : euro(o.amount)}
                   <small>
-                    <span title={o.orderNumber}>Bestellung {orderReference(o.orderNumber)}</span> · Liefergeld{" "}
+                    <span title={o.orderNumber}>Bestellung {orderReference(o)}</span> · Liefergeld{" "}
                     {euro(o.deliveryFee)}
                   </small>
                 </div>

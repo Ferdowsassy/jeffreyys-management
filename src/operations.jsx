@@ -86,7 +86,7 @@ export function Expenses({data,act}) {
 }
 function CustomerHistory({orders}) {
   const [open,setOpen]=useState(false);
-  return <details onToggle={event=>setOpen(event.currentTarget.open)}><summary>Bestellverlauf</summary>{open && orders.map(o=><details key={o.id}><summary title={o.orderNumber}>{orderReference(o.orderNumber)} · {euro(o.amount)}</summary><OrderDetails order={o} /></details>)}</details>;
+  return <details onToggle={event=>setOpen(event.currentTarget.open)}><summary>Bestellverlauf</summary>{open && orders.map(o=><details key={o.id}><summary title={o.orderNumber}>{orderReference(o)} · {euro(o.amount)}</summary><OrderDetails order={o} /></details>)}</details>;
 }
 export function Customers({data,act}) {
   const [sort,setSort]=useState('revenue'),[query,setQuery]=useState(''),[statusFilter,setStatusFilter]=useState('all');

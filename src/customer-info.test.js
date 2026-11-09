@@ -42,3 +42,16 @@ test('long references stay readable without changing real order numbers',()=>{
   assert.equal(orderReference('DETAILS-100'),'DETAILS-100');
   assert.equal(orderReference(null),'—');
 });
+
+test('order headings use the Bestellnummer from Hinweis without changing import identity',()=>{
+  const source={OrderID:'internal-123',ProviderReference:'other-reference',ArticleList:{Article:[
+    {Count:'1',Price:'0',Comment:'Deine Bestellnummer: JVPWK3'},
+  ]}};
+  const imported={orderNumber:source.OrderID,winorderDetails:source};
+  const before=JSON.stringify(imported);
+  assert.equal(orderReference(imported),'JVPWK3');
+  assert.equal(customerInfo(imported).providerReference,'JVPWK3');
+  assert.equal(JSON.stringify(imported),before);
+  assert.equal(orderReference({orderNumber:'00042'}),'00042');
+  assert.equal(orderReference({orderNumber:'00042',winorderDetails:{ArticleList:{Article:{Price:'0',Comment:'Bitte klingeln'}}}}),'00042');
+});

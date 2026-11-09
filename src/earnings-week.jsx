@@ -54,7 +54,7 @@ export default function EarningsWeek({user, data, date, onDateChange}) {
         <h4>Liefergeld pro Bestellung</h4>
         <ul className="earnings-orders" role="list">
           {chosen.paidOrders.map(order=><li key={order.id}>
-            <span title={order.orderNumber}>Bestellung {orderReference(order.orderNumber)}</span>
+            <span title={order.orderNumber}>Bestellung {orderReference(order)}</span>
             <strong>{euro(order.deliveryFee)}</strong>
           </li>)}
         </ul>
