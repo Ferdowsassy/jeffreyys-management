@@ -70,6 +70,7 @@ export function ShiftApprovals({data, act}) {
       <h3>{data.employees.find(e => e.id === r.employeeId)?.name || 'Mitarbeiter'}</h3>
       <p>Erfasst: {r.shiftId ? `${display(r.originalStart)} – ${display(r.originalEnd)}` : 'Schicht nicht erfasst'}</p>
       <p><strong>Vorschlag: {display(r.start)} – {display(r.end)}</strong></p>
+      {r.kind==="earlyClockOut" && <p>Früher ausgestempelt · Die aktuelle Ausstempelzeit gilt bis zur Genehmigung.</p>}
       <p>Begründung: {r.reason}</p>
       <small>Angefragt am {display(r.createdAt)}</small>
       <div className="toolbar">

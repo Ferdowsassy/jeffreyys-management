@@ -376,7 +376,7 @@ export async function createApp({
             closeSession(token);
       invalidate();
       const type=req.body.type;
-      const event=type==='requestShiftCorrection'?{roles:['chef'],message:'Eine Zeitkorrektur wartet auf Freigabe.'}
+      const event=(type==='requestShiftCorrection' || (type==='clockOut' && result?.pendingCorrectionId))?{roles:['chef'],message:'Eine Zeitkorrektur wartet auf Freigabe.'}
         :type==='reviewShiftCorrection'?{ids:[result?.employeeId],message:'Deine Zeitkorrektur wurde bearbeitet.'}
         :['assignOrder','claimOrder'].includes(type)?{ids:[result?.employeeId],message:'Dir wurde eine Bestellung zugeordnet.'}
         :['saveSchedule','deleteSchedule'].includes(type)?{ids:[result?.employeeId],message:'Dein Dienstplan wurde aktualisiert.'}

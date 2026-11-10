@@ -343,7 +343,7 @@ function App() {
         return true;
       }
       setData(response.state);
-      notify("Gespeichert.");
+      notify(type === "clockOut" && payload.end ? "Ausgestempelt. Die frühere Uhrzeit wartet auf Freigabe durch den Chef." : "Gespeichert.");
       return true;
     } catch (e) {
       notify(e.message);
@@ -675,7 +675,7 @@ export function Drivers({ data }) {
               orders = data.orders.filter(
                 (o) => o.employeeId === e.id && o.status === "open",
               );
-            const delivered = data.orders.filter(o => o.employeeId === e.id && o.deliveredAt && o.completionSource !== "clockOut" && day(o.createdAt) === day(Date.now()));
+            const delivered = data.orders.filter(o => o.employeeId === e.id && o.status === "delivered" && o.deliveredAt && o.completionSource !== "clockOut" && day(o.createdAt) === day(Date.now()));
             const minutes = delivered.length ? sum(delivered, o => Math.max(0, (Date.parse(o.deliveredAt) - Date.parse(o.createdAt)) / 60000)) / delivered.length : null;
             return (
               <div className="driver-row" key={e.id}>

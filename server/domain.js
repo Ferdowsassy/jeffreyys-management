@@ -219,9 +219,14 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
     case "clockOut": {
       const shift = s.shifts.find((x) => x.employeeId === user.id && !x.end);
       if (!shift) fail("No active shift", 409);
-      const end = p.end === undefined ? now : timestamp(p.end);
+      const requestedEnd = p.end === undefined ? now : timestamp(p.end);
+      const needsApproval = p.end !== undefined && user.role !== "chef";
+      const end = needsApproval ? now : requestedEnd;
+      validateShiftRange(s,user.id,shift.id,shift.start,requestedEnd);
+      if (needsApproval && (s.shiftRequests || []).some(r=>r.shiftId===shift.id && r.status==="pending"))
+        fail("Für diese Schicht wartet bereits eine Anfrage auf Freigabe.",409);
       validateShiftRange(s,user.id,shift.id,shift.start,end);
-      if (s.orders.some(o=>o.shiftId===shift.id && Date.parse(o.deliveredAt || o.createdAt)>Date.parse(end)))
+      if (s.orders.some(o=>o.shiftId===shift.id && o.status!=='cancelled' && Date.parse(o.deliveredAt || o.createdAt)>Date.parse(requestedEnd)))
         fail('Das Schichtende liegt vor einer erfassten Bestellung oder Zustellung. Bitte einen späteren Zeitpunkt wählen.',409);
       for (const order of s.orders.filter(o=>o.employeeId===user.id && o.status==='open')) requireOrderAccounting(order);
       for (const order of s.orders.filter(o => o.employeeId === user.id && o.status === "open")) {
@@ -234,16 +239,28 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
       delete employee().location;
       delete employee().returnTrip;
       result = shift;
+      if (needsApproval) {
+        const request = {id,employeeId:user.id,shiftId:shift.id,start:shift.start,end:requestedEnd,
+          originalStart:shift.start,originalEnd:end,kind:"earlyClockOut",
+          reason:"Früher ausgestempelt",status:"pending",createdAt:now,demo:false};
+        s.shiftRequests ??= [];
+        s.shiftRequests.push(request);
+        result = {...shift,pendingCorrectionId:request.id};
+        auditDetails = {requestedEnd,shiftRequestId:request.id};
+      }
       break;
     }
     case 'assignOrder': {
       requireRole(user,'chef');
       result=lookup(s.orders,p.id);
-      if (result.status!=='open') fail('Nur offene Bestellungen können neu zugeordnet werden.',409);
+      if (!['open','delivered'].includes(result.status)) fail('Nur offene oder zugestellte Bestellungen können neu zugeordnet werden.',409);
+      if (result.employeeId===p.employeeId) fail('Bitte einen anderen Fahrer wählen.',409);
       const driver=lookup(s.employees,p.employeeId);
-      const shift=s.shifts.find(x=>x.employeeId===driver.id && !x.end);
-      if (!driver.active || driver.role!=='driver' || !shift) fail('Bitte einen Fahrer im Dienst wählen.',409);
-      if (s.handoffs.some(h=>h.shiftId===result.shiftId)) fail('Diese Bestellung gehört bereits zu einer Bargeldabrechnung.',409);
+      const shift=result.status==='delivered' ? lookup(s.shifts,p.shiftId) : s.shifts.find(x=>x.employeeId===driver.id && !x.end);
+      if (!driver.active || driver.role!=='driver' || !shift || shift.employeeId!==driver.id) fail('Bitte einen aktiven Fahrer und eine zugehörige Schicht wählen.',409);
+      if (result.status==='open' && s.handoffs.some(h=>h.shiftId===shift.id)) fail('Die Zielschicht gehört bereits zu einer Bargeldabrechnung.',409);
+      if (result.status==='open' && s.handoffs.some(h=>h.shiftId===result.shiftId)) fail('Diese Bestellung gehört bereits zu einer Bargeldabrechnung.',409);
+      auditDetails={previousEmployeeId:result.employeeId,previousShiftId:result.shiftId,previousDeliveredAt:result.deliveredAt};
       Object.assign(result,{employeeId:driver.id,shiftId:shift.id,assignedAt:now,assignedBy:user.id});
       break;
     }
@@ -315,6 +332,15 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
       if (!shift) fail('Bitte zuerst einstempeln, um eine Bestellung zu übernehmen.', 409);
       Object.assign(result, {employeeId:driverId, shiftId:shift.id, status:'open', claimedAt:now,
         deliveryFee:deliveryFeeFor(s, result, today())});
+      break;
+    }
+    case "cancelOrder": {
+      requireRole(user,"chef");
+      result=lookup(s.orders,p.id);
+      if (!['available','review','open','delivered'].includes(result.status)) fail('Diese Bestellung wurde bereits storniert.',409);
+      const reason=text(p.reason,"Stornierungsgrund",1000);
+      auditDetails={previousStatus:result.status,previousEmployeeId:result.employeeId,previousShiftId:result.shiftId};
+      Object.assign(result,{status:"cancelled",cancelledAt:now,cancelledBy:user.id,cancellationReason:reason});
       break;
     }
     case "returnDeliveredOrder": {
@@ -714,7 +740,12 @@ export function action(s, user, p, { minPinLength = 4, returnTrip } = {}) {
           const shift = lookup(s.shifts, result.shiftId);
           if (shift.start !== result.originalStart || shift.end !== result.originalEnd)
             fail("Die Schicht wurde inzwischen geändert. Bitte ablehnen und eine neue Anfrage stellen lassen.", 409);
+          if (result.kind==="earlyClockOut" && s.orders.some(o=>o.shiftId===shift.id && o.status!=="cancelled"
+            && Date.parse(o.completionSource==="clockOut" && o.deliveredAt===result.originalEnd ? o.createdAt : o.deliveredAt || o.createdAt)>Date.parse(result.end)))
+            fail('Das Schichtende liegt vor einer erfassten Bestellung oder Zustellung.',409);
           applyShiftCorrection(s, shift, result.start, result.end, now);
+          if (result.kind==="earlyClockOut") for (const order of s.orders.filter(o=>o.shiftId===shift.id && o.status==="delivered" && o.completionSource==="clockOut" && o.deliveredAt===result.originalEnd))
+            order.deliveredAt=result.end;
         } else {
           validateShiftRange(s, result.employeeId, null, result.start, result.end);
           const e = lookup(s.employees, result.employeeId);

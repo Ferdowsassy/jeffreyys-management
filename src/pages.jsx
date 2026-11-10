@@ -199,7 +199,7 @@ function OrderTable({ orders, data }) {
         euro(o.amount),
         o.payment === "cash" ? "Bar" : "Online",
         <Badge tone={o.status === "delivered" ? "green" : "orange"}>
-          {o.status === "delivered" ? o.completionSource === "clockOut" ? "Zugestellt · beim Ausstempeln" : "Zugestellt" : "Offen"}
+          {o.status === "cancelled" ? "Storniert" : o.status === "delivered" ? o.completionSource === "clockOut" ? "Zugestellt · beim Ausstempeln" : "Zugestellt" : "Offen"}
         </Badge>,
       ])}
     />
@@ -628,7 +628,7 @@ export function Driver({ user, data, page, act, notify, go }) {
     const t = setInterval(() => setTick((t) => t + 1), 30000);
     return () => clearInterval(t);
   }, []);
-  const orders = data.orders.filter((o) => o.employeeId === user.id),
+  const orders = data.orders.filter((o) => o.employeeId === user.id && o.status !== "cancelled"),
     open = orders.filter((o) => o.status === "open"),
     todays = orders.filter((o) => day(o.createdAt) === today());
   const fields = [
@@ -727,7 +727,7 @@ export function Driver({ user, data, page, act, notify, go }) {
               )}
               <ClockOut active={active} act={act} />
             </div>
-          {user.role === "driver" && <details className="shift-help"><summary>Was passiert beim Ausstempeln?</summary><p>Offene Lieferungen werden als zugestellt markiert. Bargeld bleibt immer bei dir und wird automatisch von deiner Auszahlung abgezogen. Du musst nichts abgeben; der Chef muss nichts bestätigen.</p></details>}
+          {user.role === "driver" && <details className="shift-help"><summary>Was passiert beim Ausstempeln?</summary><p>Offene Lieferungen werden als zugestellt markiert. Bargeld bleibt immer bei dir und wird automatisch von deiner Auszahlung abgezogen. Du musst nichts abgeben. Bei „Früher ausgestempelt?“ muss der Chef die frühere Uhrzeit freigeben.</p></details>}
           </Panel>
           {user.role === "driver" && (
             <div className="quick-actions">

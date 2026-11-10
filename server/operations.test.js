@@ -51,9 +51,11 @@ test('chef can reassign open orders, archive/restore employees and delete zones 
  const zone=s.zones[0];action(s,chef,{type:'deleteZone',id:zone.id});assert.ok(!s.zones.includes(zone));assert.equal(o.deliveryFee,fee);
  assert.throws(()=>action(s,chef,{type:'archiveEmployee',id:chef.id}),/eigenen/);
 });
-test('earlier clock-out persists the requested end and rejects future, before-start and before-delivery times',()=>{
+test('earlier clock-out requests approval of the requested end and rejects future, before-start and before-delivery times',()=>{
  const s=seed(),kitchen=s.employees.find(e=>e.id==='samira'),shift=s.shifts.find(x=>x.employeeId===kitchen.id),end=new Date(Date.now()-3600000).toISOString();
- action(s,kitchen,{type:'clockOut',end});assert.equal(shift.end,end);assert.ok(shift.clockedOutAt);
+ action(s,kitchen,{type:'clockOut',end});assert.notEqual(shift.end,end);assert.ok(shift.clockedOutAt);
+ const request=s.shiftRequests.at(-1);assert.equal(request.end,end);assert.equal(request.status,'pending');
+ action(s,s.employees.find(e=>e.role==='chef'),{type:'reviewShiftCorrection',id:request.id,decision:'approved'});assert.equal(shift.end,end);
  const driver=s.employees.find(e=>e.id==='mia'),active=s.shifts.find(x=>x.employeeId===driver.id && !x.end);
  assert.throws(()=>action(s,driver,{type:'clockOut',end:new Date(Date.now()+3600000).toISOString()}),/Vergangenheit/);
  assert.throws(()=>action(s,driver,{type:'clockOut',end:active.start}),/Vergangenheit/);

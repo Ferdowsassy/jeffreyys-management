@@ -38,6 +38,7 @@ export function OrderQueue({user, data, act}) {
           <small>{order.payment === 'cash' ? 'Bar kassieren' : order.payment === 'online' ? 'Bereits bezahlt' : 'Zahlungsart prüfen: '+(order.paymentLabel || 'fehlt')}</small>
         </div>
         <OrderDetails order={order} role={user.role} showPayment={false} />
+        {chef && <CancelOrder order={order} act={act} />}
         {canClaim && <div className="row navigation-actions"><NavigationLinks order={order} /></div>}
         {editing === order.id && chef ? <Form initial={{...order,amount:order.amount ?? '',payment:order.payment || ''}}
           fields={[{name:'address',label:'Straße & Hausnummer',required:false}, {name:'postalCode',label:'PLZ',pattern:'[0-9]{5}'}, {name:'city',label:'Ort',required:false},
@@ -61,10 +62,45 @@ export function OrderQueue({user, data, act}) {
     {!orders.length && <Empty>{allOrders.length?'Keine Treffer. Suche oder Zahlungsfilter ändern.':'Keine verfügbaren Bestellungen. Neue Lieferungen erscheinen hier automatisch.'}</Empty>}
     {chef && <DeliveryBoard data={data} user={user} act={act} />}
     {chef && <CompletedOrderReturns data={data} act={act} />}
+    {chef && <details><summary>Stornierte Bestellungen</summary>{data.orders.filter(o=>o.status==='cancelled').map(o=><p key={o.id}>Bestellung {orderReference(o)} · {o.cancellationReason} · {new Date(o.cancelledAt).toLocaleString('de-DE')}</p>)}</details>}
     {chef && assigned.length>0 && <details className="order-reassignment"><summary>Fahrer ändern · {assigned.length} offene Lieferungen</summary><Panel title="Offene Lieferungen zuordnen">
-      <div className="table-wrap"><table><thead><tr><th>Bestellung</th><th>Adresse</th><th>Aktueller Fahrer</th><th>Neu zuordnen</th></tr></thead><tbody>{assigned.map(o=><tr key={o.id}><td>{orderReference(o)}</td><td>{o.address}{o.source==='winorder' && <details><summary>Bestelldetails</summary><OrderDetails order={o} /><div className="row"><NavigationLinks order={o} /></div></details>}</td><td>{data.employees.find(e=>e.id===o.employeeId)?.name || '—'}</td><td><form className="order-claim" onSubmit={async e=>{e.preventDefault();setBusy(true);try{await act('assignOrder',{id:o.id,employeeId:drivers[o.id] || o.employeeId});}catch{}finally{setBusy(false);}}}><select aria-label={'Neuer Fahrer für '+o.orderNumber} value={drivers[o.id] || o.employeeId} onChange={e=>setDrivers({...drivers,[o.id]:e.target.value})}>{!onDuty.some(e=>e.id===o.employeeId) && <option value={o.employeeId}>Bitte wählen</option>}{onDuty.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select><button className="secondary" disabled={busy || !onDuty.length || !drivers[o.id] || drivers[o.id]===o.employeeId}>Zuordnen</button></form></td></tr>)}</tbody></table></div>{!assigned.length && <Empty>Keine offenen Lieferungen.</Empty>}
+      <div className="table-wrap"><table><thead><tr><th>Bestellung</th><th>Adresse</th><th>Aktueller Fahrer</th><th>Neu zuordnen</th></tr></thead><tbody>{assigned.map(o=><tr key={o.id}><td>{orderReference(o)}<CancelOrder order={o} act={act} /></td><td>{o.address}{o.source==='winorder' && <details><summary>Bestelldetails</summary><OrderDetails order={o} /><div className="row"><NavigationLinks order={o} /></div></details>}</td><td>{data.employees.find(e=>e.id===o.employeeId)?.name || '—'}</td><td><form className="order-claim" onSubmit={async e=>{e.preventDefault();setBusy(true);try{await act('assignOrder',{id:o.id,employeeId:drivers[o.id] || o.employeeId});}catch{}finally{setBusy(false);}}}><select aria-label={'Neuer Fahrer für '+o.orderNumber} value={drivers[o.id] || o.employeeId} onChange={e=>setDrivers({...drivers,[o.id]:e.target.value})}>{!onDuty.some(e=>e.id===o.employeeId) && <option value={o.employeeId}>Bitte wählen</option>}{onDuty.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select><button className="secondary" disabled={busy || !onDuty.length || !drivers[o.id] || drivers[o.id]===o.employeeId}>Zuordnen</button></form></td></tr>)}</tbody></table></div>{!assigned.length && <Empty>Keine offenen Lieferungen.</Empty>}
     </Panel></details>}
   </>;
+}
+
+
+function CancelOrder({order,act}) {
+  const [busy,setBusy]=useState(false);
+  return <button className="text-button" disabled={busy} onClick={async()=>{
+    const reason=prompt('Stornierungsgrund für Bestellung '+orderReference(order)+':');
+    if (!reason?.trim()) return;
+    if (!confirm('Bestellung '+orderReference(order)+' stornieren? Umsatz, Liefergeld, Trinkgeld und Bargeldabzug werden entfernt. Bereits erfasste Auszahlungen bleiben bestehen.')) return;
+    setBusy(true);
+    try {await act('cancelOrder',{id:order.id,reason});} catch {} finally {setBusy(false);}
+  }}>Bestellung stornieren</button>;
+}
+
+function DeliveredOrderAssignment({order,data,act}) {
+  const [employeeId,setEmployeeId]=useState(''),[shiftId,setShiftId]=useState(''),[busy,setBusy]=useState(false);
+  const drivers=data.employees.filter(e=>e.role==='driver' && e.active && e.id!==order.employeeId);
+  const shifts=data.shifts.filter(s=>s.employeeId===employeeId).sort((a,b)=>b.start.localeCompare(a.start));
+  return <form className="account-form" onSubmit={async e=>{
+    e.preventDefault();
+    const driver=drivers.find(d=>d.id===employeeId);
+    if (!confirm('Zugestellte Bestellung '+orderReference(order)+' an '+driver.name+' übertragen? Liefergeld, Trinkgeld und Bargeldabzug wechseln zur gewählten Fahrerschicht. Bereits erfasste Auszahlungen bleiben bestehen.')) return;
+    setBusy(true);
+    try {await act('assignOrder',{id:order.id,employeeId,shiftId});setEmployeeId('');setShiftId('');} catch {} finally {setBusy(false);}
+  }}>
+    <label>Neuer Fahrer<select required value={employeeId} onChange={e=>{setEmployeeId(e.target.value);setShiftId('');}}>
+      <option value="">Fahrer wählen</option>{drivers.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}
+    </select></label>
+    {employeeId && <label>Zielschicht<select required value={shiftId} onChange={e=>setShiftId(e.target.value)}>
+      <option value="">Schicht wählen</option>{shifts.map(s=><option key={s.id} value={s.id}>{new Date(s.start).toLocaleString('de-DE',{timeZone:'Europe/Berlin'})} – {s.end ? new Date(s.end).toLocaleString('de-DE',{timeZone:'Europe/Berlin'}) : 'Offen'}</option>)}
+    </select></label>}
+    {employeeId && !shifts.length && <p>Für diesen Fahrer ist keine Schicht erfasst.</p>}
+    <button className="secondary" disabled={busy || !employeeId || !shiftId}>Fahrer wechseln</button>
+  </form>;
 }
 
 function CompletedOrderReturns({data, act}) {
@@ -81,9 +117,9 @@ function CompletedOrderReturns({data, act}) {
     try {await act('returnDeliveredOrder',{id:order.id});} catch {} finally {setBusy(false);}
   }
   return <details className="completed-order-returns">
-    <summary>Zugestellte Bestellungen zurückholen · {completed.length}</summary>
-    <Panel title="Zugestellte Bestellungen" subtitle="Bestellungen aller Mitarbeiter zurück in die verfügbaren Bestellungen verschieben. Auch frühere und abgeschlossene Schichten sind enthalten.">
-      <p className="notice">Die Fahrerzuordnung wird aufgehoben. Liefergeld, Trinkgeld und Bargeldabzug zählen erst nach erneuter Zustellung wieder zur Fahrerabrechnung. Bereits erfasste Auszahlungen bleiben bestehen.</p>
+    <summary>Zugestellte Bestellungen verwalten · {completed.length}</summary>
+    <Panel title="Zugestellte Bestellungen" subtitle="Fahrer wechseln, stornieren oder zurück in die verfügbaren Bestellungen verschieben. Auch frühere und abgeschlossene Schichten sind enthalten.">
+      <p className="notice">Beim Zurückholen wird die Fahrerzuordnung aufgehoben. Liefergeld, Trinkgeld und Bargeldabzug zählen dann erst nach erneuter Zustellung wieder zur Fahrerabrechnung. Bereits erfasste Auszahlungen bleiben bestehen.</p>
       <div className="toolbar order-filters">
         <label>Mitarbeiter filtern<select value={employeeId} onChange={event=>setEmployeeId(event.target.value)}>
           <option value="all">Alle Mitarbeiter</option>
@@ -95,6 +131,8 @@ function CompletedOrderReturns({data, act}) {
       <div className="delivery-grid">{orders.map(order=><Panel key={order.id} title={'Bestellung '+orderReference(order)} subtitle={data.employees.find(employee=>employee.id===order.employeeId)?.name || 'Nicht zugeordnet'}>
         <p>{order.noAddress ? 'Ohne Adresse · '+(order.postalCode ? 'PLZ '+order.postalCode : 'Pauschale') : order.address}</p>
         <p>{new Date(order.deliveredAt || order.createdAt).toLocaleString('de-DE',{timeZone:'Europe/Berlin'})} · {euro(order.amount)}</p>
+        <DeliveredOrderAssignment order={order} data={data} act={act} />
+        <CancelOrder order={order} act={act} />
         <button className="secondary" disabled={busy} onClick={()=>returnOrder(order)}>Zurück zu verfügbaren Bestellungen</button>
       </Panel>)}</div>
       {!orders.length && <Empty>{completed.length ? 'Keine passenden zugestellten Bestellungen.' : 'Keine zugestellten Bestellungen.'}</Empty>}

@@ -49,6 +49,7 @@ export function dailyEarnings(data, employeeId, date, now = Date.now()) {
 export function dailyStats(data, user, date, now = Date.now()) {
   // Scope even if this helper receives a full state rather than the API's filtered state.
   if(user.role==='driver')data={...data,orders:data.orders.filter(o=>o.employeeId===user.id)};
+  data={...data,orders:data.orders.filter(o=>o.status!=='cancelled')};
   const reportDate=user.role==='chef'?revenueDate:berlinDate;
   const orders = data.orders.filter(o=>reportDate(o.createdAt)===date);
   const completed = data.orders.filter(o=>o.deliveredAt && reportDate(o.deliveredAt)===date);
